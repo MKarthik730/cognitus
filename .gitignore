@@ -28,3 +28,4 @@ postgres-data/
 # OS
 .DS_Store
 Thumbs.db
+DEV_LOG.md
