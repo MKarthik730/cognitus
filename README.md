@@ -1,25 +1,25 @@
-# Cortex Council
+# Cognitus
 
 > Multi-perspective AI reasoning platform powered by HuggingFace LLMs.
 
-Cortex Council routes any situation or question through multiple domain-expert AI agents simultaneously. Each expert analyzes from their domain's lens. A cross-check coordinator finds contradictions. A chief synthesizer produces the final verdict. Everything streams in real-time to an animated React Flow graph.
+Cognitus routes any situation or question through multiple domain-expert AI agents simultaneously. Each expert analyzes from their domain's lens. A cross-check coordinator finds contradictions. A chief synthesizer produces the final verdict. Everything streams in real-time to an animated React Flow graph.
 
 ## Architecture
 
 ```
                     ┌──────────────┐
-                    │  Distributor  │
-                    │  (Domain Sel) │
+                    │  Distributor │
+                    │  (Domain Sel)│
                     └──────┬───────┘
                            │
               ┌────────────┼────────────┐
               │            │            │
         ┌─────▼────┐ ┌────▼────┐ ┌────▼────┐
-        │  Expert 1 │ │Expert 2 │ │Expert N │
+        │  Expert 1│ │Expert 2 │ │Expert N |
         │ (Legal)  │ │(Finance)│ │(Medical)│
         └─────┬────┘ └────┬────┘ └────┬────┘
-              │            │            │
-              └────────────┼────────────┘
+              │           │           │
+              └───────────┼-──────────┘
                            │
                     ┌──────▼───────┐
                     │   Cross-     │
