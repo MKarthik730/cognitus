@@ -6,31 +6,43 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 
 ## Architecture
 
-```
-                    ┌──────────────┐
-                    │  Distributor │
-                    │  (Domain Sel)│
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-        ┌─────▼────┐ ┌────▼────┐ ┌────▼────┐
-        │  Expert 1│ │Expert 2 │ │Expert N |
-        │ (Legal)  │ │(Finance)│ │(Medical)│
-        └─────┬────┘ └────┬────┘ └────┬────┘
-              │           │           │
-              └───────────┼-──────────┘
-                           │
-                    ┌──────▼───────┐
-                    │   Cross-     │
-                    │   Check      │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │  Synthesizer │
-                    │ (Final Ver.) │
-                    └──────────────┘
-```
+<div align="center">
+
+### 🧭 Step 1 — Distribution
+
+![Distributor](https://img.shields.io/badge/🧭_Distributor-Domain_Selector-4A90D9?style=for-the-badge)
+
+*Routes the input to the most relevant expert domains*
+
+---
+
+### 🧠 Step 2 — Expert Analysis (Parallel)
+
+| ![Legal](https://img.shields.io/badge/⚖️_Expert_1-Legal-7B68EE?style=for-the-badge) | ![Finance](https://img.shields.io/badge/💹_Expert_2-Finance-2ECC71?style=for-the-badge) | ![Medical](https://img.shields.io/badge/🩺_Expert_N-Medical-E74C3C?style=for-the-badge) |
+|:---:|:---:|:---:|
+| Analyzes legal risk & compliance | Evaluates financial implications | Assesses health & safety factors |
+
+*Each expert analyzes from their domain's lens — simultaneously*
+
+---
+
+### 🔍 Step 3 — Cross-Check
+
+![CrossCheck](https://img.shields.io/badge/🔍_Cross--Check_Coordinator-Contradiction_Finder-F39C12?style=for-the-badge)
+
+*Finds conflicts, gaps, and disagreements across expert outputs*
+
+---
+
+### ✅ Step 4 — Synthesis
+
+![Synthesizer](https://img.shields.io/badge/✅_Chief_Synthesizer-Final_Verdict-1ABC9C?style=for-the-badge)
+
+*Produces a unified, actionable conclusion*
+
+</div>
+
+---
 
 ## Tech Stack
 
