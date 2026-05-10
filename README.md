@@ -64,8 +64,8 @@ Cortex Council routes any situation or question through multiple domain-expert A
 
 ```bash
 # Clone and enter
-git clone https://github.com/MKarthik730/cortex-council.git
-cd cortex-council
+git clone https://github.com/MKarthik730/cognitus.git
+cd cognitus
 
 # Backend setup
 python -m venv .venv
@@ -94,7 +94,7 @@ cd frontend && npm run dev
 ## Project Structure
 
 ```
-cortex-council/
+cognitus/
 ├── backend/
 │   ├── app/
 │   │   ├── agents/         # LLM-powered agent nodes
