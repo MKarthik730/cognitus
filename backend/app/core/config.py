@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     HF_PRIMARY_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.3"
     HF_FALLBACK_1: str = "HuggingFaceH4/zephyr-7b-beta"
     HF_FALLBACK_2: str = "microsoft/Phi-3-mini-4k-instruct"
-    HF_MAX_NEW_TOKENS: int = 512
+    HF_MAX_NEW_TOKENS: int = 1024
     HF_TIMEOUT: int = 30
     HF_DAILY_LIMIT: int = 800
     HF_HOURLY_LIMIT: int = 50

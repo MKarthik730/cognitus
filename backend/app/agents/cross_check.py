@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import get_args
+from typing import cast, get_args
 
 from backend.app.graph.state import (
     Agreement,
@@ -33,10 +33,14 @@ _VALID_CONTRADICTION_TYPES: set[str] = set(get_args(ContradictionType))
 def _build_user_prompt(experts: dict[str, ExpertOutput]) -> str:
     sections: list[str] = []
     for domain, output in experts.items():
+        citations = output.get("citations")
+        citations_block = f"Citations: {', '.join(citations)}\n" if citations else ""
         sections.append(
             f"[{domain.upper()} EXPERT]\n"
             f"Analysis: {output['analysis']}\n"
             f"Confidence: {output['confidence']}\n"
+            f"{citations_block}"
+            f"Processing time: {output['processing_time_ms']}ms\n"
         )
     return "\n".join(sections)
 
@@ -46,10 +50,10 @@ def _parse_contradictions(text: str) -> list[Contradiction]:
     for line in text.splitlines():
         if not line.startswith("CONTRADICTION:"):
             continue
-        parts = [p.strip() for p in line[len("CONTRADICTION:") :].split(",")]
+        parts = [p.strip() for p in line[len("CONTRADICTION:") :].split(",", 4)]
         if len(parts) < 5:
             continue
-        domain_a, domain_b, ctype, severity, *desc_parts = parts
+        domain_a, domain_b, ctype, severity, description = parts
         if domain_a not in _VALID_DOMAINS or domain_b not in _VALID_DOMAINS:
             continue
         if ctype not in _VALID_CONTRADICTION_TYPES:
@@ -58,10 +62,10 @@ def _parse_contradictions(text: str) -> list[Contradiction]:
             severity = "medium"
         results.append(
             Contradiction(
-                between=(domain_a, domain_b),
-                type=ctype,
-                description=",".join(desc_parts).strip(),
-                severity=severity,
+                between=(cast(DomainName, domain_a), cast(DomainName, domain_b)),
+                type=cast(ContradictionType, ctype),
+                description=description,
+                severity=cast(ConfidenceLevel, severity),
             )
         )
     return results
@@ -79,7 +83,12 @@ def _parse_agreements(text: str) -> list[Agreement]:
         if domain_a not in _VALID_DOMAINS or domain_b not in _VALID_DOMAINS:
             continue
         points = [p.strip() for p in points_str.split("|") if p.strip()]
-        results.append(Agreement(between=(domain_a, domain_b), points=points))
+        results.append(
+            Agreement(
+                between=(cast(DomainName, domain_a), cast(DomainName, domain_b)),
+                points=points,
+            )
+        )
     return results
 
 
