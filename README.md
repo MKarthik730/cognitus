@@ -1,6 +1,6 @@
 # Cognitus
 
-> Multi-perspective AI reasoning platform powered by HuggingFace LLMs — with full **Case Study Mode**.
+> Multi-perspective AI reasoning platform powered by HuggingFace LLMs — with full Case Study Mode.
 
 Cognitus operates in two modes:
 
@@ -9,26 +9,15 @@ Cognitus operates in two modes:
 
 Everything streams to an animated canvas graph via WebSocket.
 
----
-
 ## Architecture
 
 ![Cognitus Architecture](./architecture.svg)
 
 ## Pipeline
-![Cognitus Architecture](./pipeline.svg)
 
-| Step | Standard Mode | Case Study Mode |
-|------|---------------|-----------------|
-| 0 | — | Upload & extract files (PDF/Image/DOCX/TXT) |
-| 1 | Node Selector picks 3–5 experts dynamically | User defines 2–6 custom expert nodes with behaviors |
-| 2 | — | Context pipeline summarizes files if over token limit |
-| 3 | All experts analyze in parallel | Same, with case context injected |
-| 4 | Cross-Check finds contradictions | Same |
-| 5 | Synthesizer produces unified verdict | Same |
+![Cognitus Pipeline](./pipeline.svg)
 
----
-
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -42,16 +31,12 @@ Everything streams to an animated canvas graph via WebSocket.
 | Auth | JWT + bcrypt |
 | Container | Docker + Docker Compose |
 
----
-
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose (optional, for postgres/redis)
 - HuggingFace API token ([get one free](https://huggingface.co/settings/tokens))
-
----
 
 ## Quick Start
 
@@ -95,16 +80,14 @@ cd frontend && npm run dev
 
 > **Note:** The backend starts without Redis/Postgres — it logs a warning and runs in standalone mode for WebSocket testing.
 
----
-
 ## Case Study Mode — Feature Details
 
 ### File Upload & Extraction
 
-Switch to **Case Study** tab in the left panel to access the file drop zone.
+Switch to the **Case Study** tab in the left panel to access the file drop zone.
 
 | File Type | Extraction Method |
-|-----------|-------------------|
+|-----------|------------------|
 | PDF | PDF.js in-browser, PyMuPDF on server |
 | DOCX | mammoth.js in-browser, python-docx on server |
 | PNG / JPG / WEBP | Base64 → HF Inference API for description |
@@ -127,16 +110,16 @@ Define 2–6 custom expert nodes with:
 - **Reorder** — Via drag handle
 - **Delete** — Disabled when only 2 nodes remain
 
-#### Preset Templates
+### Preset Templates
 
 | Template | Nodes |
 |----------|-------|
-| **Medical Team** | Cardiologist, Intensivist, Pharmacologist, Risk Assessor |
-| **Detective Squad** | Evidence Analyst, Forensic Pathologist, Psychologist, Legal Advisor |
-| **Startup Review** | Investor, CFO, Market Analyst, Devil's Advocate |
-| **Legal Panel** | Prosecution, Defense Counsel, Forensic Expert, Judge |
-| **Engineering Review** | Backend Engineer, Security Analyst, DevOps Lead, QA Engineer |
-| **Custom** | Starts with 2 empty node slots |
+| Medical Team | Cardiologist, Intensivist, Pharmacologist, Risk Assessor |
+| Detective Squad | Evidence Analyst, Forensic Pathologist, Psychologist, Legal Advisor |
+| Startup Review | Investor, CFO, Market Analyst, Devil's Advocate |
+| Legal Panel | Prosecution, Defense Counsel, Forensic Expert, Judge |
+| Engineering Review | Backend Engineer, Security Analyst, DevOps Lead, QA Engineer |
+| Custom | Starts with 2 empty node slots |
 
 Each preset ships with detailed behavior prompts that control how the expert reasons.
 
@@ -149,46 +132,24 @@ After extraction, before analysis:
 3. **Compress** — If still > 10000 chars, run global compression pass
 4. **Inject** — All nodes receive the same `CASE_CONTEXT` string
 
-A banner appears when context was condensed: "ℹ Case files condensed to fit analysis limits."
+> ℹ A banner appears when context was condensed: *"Case files condensed to fit analysis limits."*
 
 ### Node Execution
 
-All nodes run in parallel. Each receives:
-- Their **behavior** system prompt
-- The **case context**
-- The **guiding question** (optional)
-
-Each response is parsed for: `CONFIDENCE`, `REASONING`, `KEY FINDINGS`, `CONCERNS`, `POSITION`
-
-On parse failure, the node is marked as error and excluded from synthesis.
+All nodes run in parallel. Each receives their behavior system prompt, the case context, and the guiding question (optional). Each response is parsed for: `CONFIDENCE`, `REASONING`, `KEY FINDINGS`, `CONCERNS`, `POSITION`. On parse failure, the node is marked as error and excluded from synthesis.
 
 ### Output
 
-**Verdict tab:**
-- Verdict card with confidence pill
-- Consensus meter (0–100% gradient)
-- Critical Findings (warning tint)
-- Unresolved Disagreements (danger tint)
-- Numbered Recommendations
-- Full Reasoning block
+**Verdict tab:** Verdict card with confidence pill · Consensus meter (0–100% gradient) · Critical Findings · Unresolved Disagreements · Numbered Recommendations · Full Reasoning block
 
-**Node Outputs tab:**
-- One card per node with colored left border
-- Position (always visible, italic)
-- Key Findings (bullet list)
-- Concerns (danger-tinted block)
-- Reasoning (collapsible)
-- Cross-Check card at bottom (dashed border)
-
----
+**Node Outputs tab:** One card per node with colored left border · Position · Key Findings · Concerns · Reasoning (collapsible) · Cross-Check card at bottom
 
 ## Standard Mode — Dynamic Node Selection
 
-In Standard mode, the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and selects 3–5 relevant expert roles on the fly. Responses are parsed via a 3-layer regex extraction pipeline. On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
+The Node Selector (`meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and selects 3–5 relevant expert roles on the fly via a 3-layer regex extraction pipeline. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist.
 
 Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
----
 ## API Endpoints
 
 | Method | Path | Description |
@@ -205,8 +166,6 @@ Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B
 | POST | `/api/case-study/upload` | Upload file for case study extraction |
 | GET | `/api/nodes` | List available expert domains |
 | GET | `/health` | Health check |
-
----
 
 ## Project Structure
 
@@ -256,26 +215,11 @@ cognitus/
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-├── docs/
-│   ├── architecture.svg
-│   └── pipeline.svg
+├── architecture.svg
+├── pipeline.svg
 ├── docker-compose.yml
 └── .env.example
 ```
-
----
-
-## Dynamic Node Selection
-
-Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
-
-1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
-2. Response is parsed via a 3-layer regex extraction pipeline (dash lines → bold text → capitalized words)
-3. Each selected node gets an auto-generated role description and behavior prompt
-4. Nodes appear in the left panel with a staggered fade-in animation
-5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
-
-Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
 ## Rate Limits
 
@@ -283,8 +227,6 @@ HuggingFace free tier limits enforced by the platform:
 - 800 requests/day global
 - 50 requests/hour per user
 - 1 request per 2 seconds burst
-
----
 
 ## License
 
