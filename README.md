@@ -6,44 +6,11 @@ Cognitus routes any situation or question through dynamically selected domain-ex
 
 ## Architecture
 
-```
-                    ┌──────────────┐
-                    │   User       │
-                    │   Input      │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │ Node Selector │
-                    │ (Dynamic)    │
-                    └──────┬───────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-       ┌──────▼─────┐ ┌───▼────┐ ┌────▼──────┐
-       │ Expert 1   │ │Expert 2│ │ Expert N  │
-       └──────┬─────┘ └───┬────┘ └────┬──────┘
-              │            │            │
-              └────────────┼────────────┘
-                           │
-                    ┌──────▼───────┐
-                    │ Cross-Check  │
-                    │ Coordinator  │
-                    └──────┬───────┘
-                           │
-                    ┌──────▼───────┐
-                    │  Synthesizer │
-                    │  (Verdict)   │
-                    └──────────────┘
-```
+![Cognitus Architecture](./docs/architecture.svg)
 
 ### Pipeline Steps
 
-| Step | Node | Description |
-|------|------|-------------|
-| 1 | **Node Selector** | Dynamically selects 3–5 domain experts via LLM |
-| 2 | **Experts** (parallel) | Each expert analyzes from their specialized perspective |
-| 3 | **Cross-Check** | Finds contradictions and agreements across all expert outputs |
-| 4 | **Synthesizer** | Produces a unified verdict reconciling all perspectives |
+![Pipeline Steps](./docs/pipeline.svg)
 
 ## Tech Stack
 
@@ -168,6 +135,9 @@ cognitus/
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/
+│   ├── architecture.svg
+│   └── pipeline.svg
 ├── docker-compose.yml
 └── .env.example
 ```
