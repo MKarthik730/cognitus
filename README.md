@@ -2,7 +2,7 @@
 
 > Multi-perspective AI reasoning platform powered by HuggingFace LLMs.
 
-Cognitus routes any situation or question through multiple domain-expert AI agents simultaneously. Each expert analyzes from their domain's lens. A cross-check coordinator finds contradictions. A chief synthesizer produces the final verdict. Everything streams in real-time to an animated React Flow graph.
+Cognitus routes any situation or question through dynamically selected domain-expert AI agents in real time. Before analysis begins, a lightweight **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and picks 3–5 relevant expert roles on the fly — no hardcoded panels. Each expert analyzes from their domain's lens, a cross-check coordinator finds contradictions, and a chief synthesizer produces the final verdict. Everything streams to an animated canvas graph via WebSocket.
 
 ## Architecture
 
@@ -13,15 +13,14 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
                     └──────┬───────┘
                            │
                     ┌──────▼───────┐
-                    │ Distributor  │
-                    │ (Domain Sel) │
+                    │ Node Selector │
+                    │ (Dynamic)    │
                     └──────┬───────┘
                            │
               ┌────────────┼────────────┐
               │            │            │
        ┌──────▼─────┐ ┌───▼────┐ ┌────▼──────┐
        │ Expert 1   │ │Expert 2│ │ Expert N  │
-       │ (Legal)    │ │(Finance)│ │(Medical)  │
        └──────┬─────┘ └───┬────┘ └────┬──────┘
               │            │            │
               └────────────┼────────────┘
@@ -41,8 +40,8 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 
 | Step | Node | Description |
 |------|------|-------------|
-| 1 | **Distributor** | Classifies input and selects 3-5 most relevant expert domains |
-| 2 | **Experts** (parallel) | Each domain expert analyzes from their specialized perspective |
+| 1 | **Node Selector** | Dynamically selects 3–5 domain experts via LLM |
+| 2 | **Experts** (parallel) | Each expert analyzes from their specialized perspective |
 | 3 | **Cross-Check** | Finds contradictions and agreements across all expert outputs |
 | 4 | **Synthesizer** | Produces a unified verdict reconciling all perspectives |
 
@@ -50,26 +49,20 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 
 | Layer | Technology |
 |-------|-----------|
-| LLM Provider | HuggingFace Inference API |
-| Orchestration | LangGraph |
-| Backend | FastAPI + Uvicorn |
-| WebSockets | FastAPI WebSocket + asyncio |
+| LLM Provider | HuggingFace Inference API (Router) |
+| Backend | FastAPI + Uvicorn + WebSockets |
+| Frontend | Vanilla JS + Canvas API + Vite |
 | Database | PostgreSQL 16 (async via asyncpg) |
 | ORM | SQLAlchemy 2.0 async |
 | Cache | Redis 7 |
 | Auth | JWT + bcrypt |
-| Frontend | React 18 + Vite + TypeScript |
-| Graph UI | React Flow |
-| Animation | Framer Motion |
-| State | Zustand |
-| Styling | Tailwind CSS |
 | Container | Docker + Docker Compose |
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 20+
-- Docker & Docker Compose
+- Docker & Docker Compose (optional, for postgres/redis)
 - HuggingFace API token ([get one free](https://huggingface.co/settings/tokens))
 
 ## Quick Start
@@ -100,15 +93,17 @@ cd frontend
 npm install
 cd ..
 
-# Start infrastructure
+# Start infrastructure (or set REDIS_URL / DATABASE_URL to skip)
 docker compose up -d postgres redis
 
-# Run backend
+# Run backend (port 8000)
 uvicorn backend.main:app --reload --port 8000
 
-# Run frontend (separate terminal)
+# Run frontend (separate terminal, port 5173)
 cd frontend && npm run dev
 ```
+
+> **Note:** The backend starts without Redis/Postgres — it logs a warning and runs in standalone mode for WebSocket testing.
 
 ## API Endpoints
 
@@ -132,53 +127,62 @@ cd frontend && npm run dev
 cognitus/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/         # LLM-powered agent nodes
+│   │   ├── agents/              # LLM-powered agent nodes
 │   │   │   ├── distributor.py
 │   │   │   ├── expert_node.py
 │   │   │   ├── cross_check.py
 │   │   │   └── synthesizer.py
-│   │   ├── graph/          # LangGraph state machine
+│   │   ├── graph/               # LangGraph state machine
 │   │   │   ├── state.py
 │   │   │   └── council_graph.py
-│   │   ├── api/            # FastAPI routes + WebSocket
+│   │   ├── api/                 # FastAPI routes + WebSocket
 │   │   │   ├── routes/
 │   │   │   │   ├── auth.py
 │   │   │   │   ├── sessions.py
 │   │   │   │   └── analyze.py
 │   │   │   └── websocket.py
-│   │   ├── core/           # Config, DB, security
+│   │   ├── core/                # Config, DB, security
 │   │   │   ├── config.py
 │   │   │   ├── database.py
 │   │   │   └── security.py
-│   │   ├── services/       # HF API, rate limiter, cache
+│   │   ├── services/            # HF API, node selector, etc.
 │   │   │   ├── hf_service.py
+│   │   │   ├── node_selector.py
 │   │   │   ├── rate_limiter.py
 │   │   │   ├── cache.py
 │   │   │   └── queue_worker.py
-│   │   ├── models/         # SQLAlchemy ORM models (7 tables)
-│   │   └── schemas/        # Pydantic request/response schemas
+│   │   ├── models/              # SQLAlchemy ORM models (7 tables)
+│   │   └── schemas/             # Pydantic request/response schemas
 │   ├── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Graph/       # React Flow canvas + nodes
-│   │   │   ├── QueryBar.tsx
-│   │   │   ├── ConsensusMeter.tsx
-│   │   │   ├── SynthesisPanel.tsx
-│   │   │   └── RateLimitBanner.tsx
-│   │   ├── stores/          # Zustand state management
-│   │   ├── hooks/           # WebSocket hook
-│   │   ├── App.tsx
-│   │   └── main.tsx
+│   │   ├── app.js               # Main application logic
+│   │   ├── store.js             # Reactive state store
+│   │   ├── canvas.js            # Canvas graph rendering
+│   │   ├── api.js               # WebSocket + HTTP client
+│   │   ├── utils.js             # Helpers, colors, markdown
+│   │   ├── main.js              # Entry point
+│   │   └── styles.css           # All styles (no CSS framework)
+│   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-├── postgres/
-│   └── init.sql
 ├── docker-compose.yml
 └── .env.example
 ```
+
+## Dynamic Node Selection
+
+Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
+
+1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
+2. Response is parsed via a 3-layer regex extraction pipeline (dash lines → bold text → capitalized words)
+3. Each selected node gets an auto-generated role description and behavior prompt
+4. Nodes appear in the left panel with a staggered fade-in animation
+5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
+
+Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
 ## Rate Limits
 
