@@ -6,12 +6,12 @@ Cognitus routes any situation or question through dynamically selected domain-ex
 
 ## Architecture
 
-![Cognitus Architecture](./docs/architecture.svg)
+![Cognitus Architecture](./architecture.svg)
 
-### Pipeline Steps
 
-![Pipeline Steps](./docs/pipeline.svg)
+## Pipeline
 
+![Pipeline Steps](./pipeline.svg)
 ## Tech Stack
 
 | Layer | Technology |
