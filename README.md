@@ -15,7 +15,7 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ![Cognitus Architecture](./architecture.svg)
 
-## Pipelien
+## Pipeline
 ![Cognitus Architecture](./pipeline.svg)
 
 | Step | Standard Mode | Case Study Mode |
