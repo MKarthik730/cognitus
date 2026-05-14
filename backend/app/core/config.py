@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     )
 
     HF_API_TOKEN: str
-    HF_PRIMARY_MODEL: str = "mistralai/Mistral-7B-Instruct-v0.3"
-    HF_FALLBACK_1: str = "HuggingFaceH4/zephyr-7b-beta"
-    HF_FALLBACK_2: str = "microsoft/Phi-3-mini-4k-instruct"
+    HF_PRIMARY_MODEL: str = "meta-llama/Llama-3.2-1B-Instruct"
+    HF_FALLBACK_1: str = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+    HF_FALLBACK_2: str = "katanemo/Arch-Router-1.5B"
     HF_MAX_NEW_TOKENS: int = 1024
     HF_TIMEOUT: int = 30
     HF_DAILY_LIMIT: int = 800

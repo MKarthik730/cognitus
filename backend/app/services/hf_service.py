@@ -1,8 +1,9 @@
-import asyncio
+from __future__ import annotations
+
+import logging
 from typing import Optional
 
-from huggingface_hub import InferenceClient
-from huggingface_hub.utils import HfHubHTTPError
+import httpx
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -12,25 +13,18 @@ from tenacity import (
 
 from backend.app.core.config import settings
 
-MODEL_FORMATS: dict[str, str] = {
-    "mistralai/Mistral-7B-Instruct-v0.3": "mistral",
-    "HuggingFaceH4/zephyr-7b-beta": "zephyr",
-    "microsoft/Phi-3-mini-4k-instruct": "phi3",
-}
+logger = logging.getLogger(__name__)
 
+ROUTER_URL = "https://router.huggingface.co/v1/chat/completions"
 
-def _format_prompt(system: str, user: str, model_id: str) -> str:
-    fmt = MODEL_FORMATS.get(model_id, "mistral")
-    if fmt == "mistral":
-        return f"[INST] {system}\n\n{user} [/INST]"
-    if fmt == "zephyr":
-        return f"<|system|>{system}</s>\n<|user|>{user}</s>\n<|assistant|>"
-    return f"<|system|>{system}<|end|>\n<|user|>{user}<|end|>\n<|assistant|>"
+_RETRY_EXCEPTIONS = (
+    httpx.TimeoutException,
+    httpx.RequestError,
+)
 
 
 class HFService:
     def __init__(self) -> None:
-        self._client = InferenceClient(token=settings.HF_API_TOKEN)
         self._models = [
             settings.HF_PRIMARY_MODEL,
             settings.HF_FALLBACK_1,
@@ -40,24 +34,48 @@ class HFService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=2, min=2, max=8),
-        retry=retry_if_exception_type((HfHubHTTPError, OSError)),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
     )
-    async def _infer(self, prompt: str, model: str) -> str:
-        return await asyncio.to_thread(
-            self._client.text_generation,
-            prompt,
-            model=model,
-            max_new_tokens=settings.HF_MAX_NEW_TOKENS,
-            temperature=0.3,
-        )
+    async def _chat(self, model: str, system: str, user: str) -> str:
+        headers = {
+            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": f"{model}:fastest",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": settings.HF_MAX_NEW_TOKENS,
+            "temperature": 0.3,
+        }
+
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(settings.HF_TIMEOUT)
+        ) as client:
+            response = await client.post(ROUTER_URL, headers=headers, json=payload)
+
+            if response.status_code == 400:
+                logger.error("HF API 400 on model %s: %s", model, response.text[:500])
+                raise RuntimeError(f"Model {model} returned 400: {response.text[:200]}")
+
+            if response.status_code == 429:
+                logger.warning("HF API rate limited on model %s", model)
+                raise RuntimeError(f"Rate limited on model {model}")
+
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return content or ""
 
     async def generate(self, system: str, user: str) -> tuple[str, str]:
         last_error: Optional[Exception] = None
         for model in self._models:
-            prompt = _format_prompt(system, user, model)
             try:
-                text = await self._infer(prompt, model)
+                text = await self._chat(model, system, user)
                 return text.strip(), model
             except Exception as e:
+                logger.warning("Model %s failed: %s", model, e)
                 last_error = e
         raise RuntimeError("All HuggingFace models failed") from last_error
