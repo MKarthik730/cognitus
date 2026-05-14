@@ -24,9 +24,7 @@ export function init() {
     if (e.key === 'Enter' && getState().mode === 'case-study') startCaseAnalysis();
   });
   document.getElementById('btn-stop').addEventListener('click', stopAnalysis);
-  document.querySelectorAll('.mode-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchMode(tab.dataset.mode));
-  });
+
   document.querySelectorAll('.right-tab').forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
@@ -40,7 +38,6 @@ export function init() {
   document.getElementById('btn-presets').addEventListener('click', togglePresetsDropdown);
   document.getElementById('btn-add-case-node').addEventListener('click', addCaseNode);
 
-  setupFileDropZone();
   setupOutputsDelegation();
 
   subscribe('status', updateButtons);
@@ -236,9 +233,8 @@ function updateModeBadge() {
     badge.textContent = 'Failed';
     badge.className = 'mode-badge';
   } else {
-    badge.textContent = s.mode === 'case-study' ? 'Case Study' : 'Standard';
+    badge.textContent = 'Standard';
     badge.className = 'mode-badge';
-    if (s.mode === 'case-study') badge.classList.add('case-study');
   }
 }
 
@@ -758,6 +754,21 @@ function startCaseAnalysis() {
 }
 
 function setupOutputsDelegation() {
+  document.getElementById('outputs-list').addEventListener('click', (e) => {
+    const header = e.target.closest('[data-toggle]');
+    if (header) {
+      header.parentElement.classList.toggle('open');
+    }
+    const expand = e.target.closest('[data-expand]');
+    if (expand) {
+      const body = expand.closest('.output-card-body, .reasoning-text, .verdict-content');
+      if (body) {
+        body.style.maxHeight = 'none';
+        expand.remove();
+      }
+    }
+  });
+
   document.getElementById('tab-verdict').addEventListener('click', (e) => {
     const expand = e.target.closest('[data-expand]');
     if (expand) {

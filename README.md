@@ -47,7 +47,8 @@ Everything streams to an animated canvas graph via WebSocket.
                      └──────────────┘
 ```
 
-### Pipeline Steps
+![Cognitus Architecture](./architecture.svg)
+
 
 | Step | Standard Mode | Case Study Mode |
 |------|---------------|-----------------|
@@ -60,6 +61,9 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ---
 
+## Pipeline
+
+![Pipeline Steps](./pipeline.svg)
 ## Tech Stack
 
 | Layer | Technology |
@@ -221,7 +225,6 @@ In Standard mode, the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instru
 Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
 ---
-
 ## API Endpoints
 
 | Method | Path | Description |
@@ -289,11 +292,26 @@ cognitus/
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/
+│   ├── architecture.svg
+│   └── pipeline.svg
 ├── docker-compose.yml
 └── .env.example
 ```
 
 ---
+
+## Dynamic Node Selection
+
+Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
+
+1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
+2. Response is parsed via a 3-layer regex extraction pipeline (dash lines → bold text → capitalized words)
+3. Each selected node gets an auto-generated role description and behavior prompt
+4. Nodes appear in the left panel with a staggered fade-in animation
+5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
+
+Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
 ## Rate Limits
 

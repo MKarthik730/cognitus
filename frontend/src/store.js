@@ -3,7 +3,6 @@ const subscribers = new Map();
 let state = {
   situation: '',
   status: 'idle',
-  mode: 'standard',
   activeTab: 'verdict',
   error: null,
   activeNode: null,
@@ -18,9 +17,6 @@ let state = {
   agreements: [],
   consensusScore: 0.5,
   synthesis: null,
-
-  files: [],
-  nodes: [],
 
   caseStudy: {
     files: [],
