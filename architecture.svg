@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 540" width="860" height="540" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+    <linearGradient id="userGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#58a6ff"/>
+      <stop offset="100%" style="stop-color:#388bfd"/>
+    </linearGradient>
+    <linearGradient id="selectorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3fb950"/>
+      <stop offset="100%" style="stop-color:#2ea043"/>
+    </linearGradient>
+    <linearGradient id="expertGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d2a8ff"/>
+      <stop offset="100%" style="stop-color:#a371f7"/>
+    </linearGradient>
+    <linearGradient id="crossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffa657"/>
+      <stop offset="100%" style="stop-color:#d18616"/>
+    </linearGradient>
+    <linearGradient id="synthGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f85149"/>
+      <stop offset="100%" style="stop-color:#da3633"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#58a6ff" opacity="0.7"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#a371f7" opacity="0.7"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ffa657" opacity="0.7"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#f85149" opacity="0.7"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="860" height="540" fill="url(#bg)" rx="12"/>
+
+  <!-- Subtle grid -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#21262d" stroke-width="0.5"/>
+  </pattern>
+  <rect width="860" height="540" fill="url(#grid)" rx="12" opacity="0.6"/>
+
+  <!-- Title -->
+  <text x="430" y="36" text-anchor="middle" font-size="15" font-weight="600" fill="#8b949e" letter-spacing="3" font-family="monospace">COGNITUS · ARCHITECTURE</text>
+
+  <!-- ── USER INPUT ── -->
+  <g filter="url(#shadow)">
+    <rect x="330" y="60" width="200" height="60" rx="10" fill="url(#userGrad)" opacity="0.15" stroke="#58a6ff" stroke-width="1.5"/>
+  </g>
+  <text x="430" y="85" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="700" letter-spacing="1">USER INPUT</text>
+  <text x="430" y="103" text-anchor="middle" font-size="10" fill="#58a6ff" opacity="0.7">Query / Situation</text>
+
+  <!-- Arrow: User → Node Selector -->
+  <line x1="430" y1="120" x2="430" y2="148" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6" marker-end="url(#arrowBlue)"/>
+
+  <!-- ── NODE SELECTOR ── -->
+  <g filter="url(#shadow)">
+    <rect x="295" y="155" width="270" height="68" rx="10" fill="url(#selectorGrad)" opacity="0.12" stroke="#3fb950" stroke-width="1.5"/>
+  </g>
+  <text x="430" y="181" text-anchor="middle" font-size="11" fill="#3fb950" font-weight="700" letter-spacing="1">NODE SELECTOR</text>
+  <text x="430" y="198" text-anchor="middle" font-size="9.5" fill="#3fb950" opacity="0.75">Llama-3.2-1B-Instruct · Picks 3–5 Experts</text>
+  <text x="430" y="213" text-anchor="middle" font-size="9" fill="#3fb950" opacity="0.5">Dynamic · No hardcoded panels</text>
+
+  <!-- Arrows: Selector → Experts (fan out) -->
+  <!-- Left expert -->
+  <path d="M 340 223 Q 210 255 175 278" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.55" marker-end="url(#arrowPurple)"/>
+  <!-- Center-left expert -->
+  <path d="M 390 223 Q 330 255 310 278" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.55" marker-end="url(#arrowPurple)"/>
+  <!-- Center expert -->
+  <line x1="430" y1="223" x2="430" y2="278" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.55" marker-end="url(#arrowPurple)"/>
+  <!-- Center-right expert -->
+  <path d="M 470 223 Q 530 255 550 278" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.55" marker-end="url(#arrowPurple)"/>
+  <!-- Right expert -->
+  <path d="M 520 223 Q 650 255 685 278" stroke="#a371f7" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.55" marker-end="url(#arrowPurple)"/>
+
+  <!-- Experts label strip -->
+  <text x="430" y="262" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.5" font-style="italic">Parallel Analysis</text>
+
+  <!-- ── EXPERT NODES (5) ── -->
+  <!-- Expert 1 -->
+  <g filter="url(#shadow)">
+    <rect x="90" y="283" width="140" height="58" rx="9" fill="url(#expertGrad)" opacity="0.12" stroke="#a371f7" stroke-width="1.2"/>
+  </g>
+  <text x="160" y="306" text-anchor="middle" font-size="10.5" fill="#d2a8ff" font-weight="700">Expert 1</text>
+  <text x="160" y="322" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.75">Domain Specialist</text>
+  <text x="160" y="336" text-anchor="middle" font-size="8.5" fill="#a371f7" opacity="0.5">Auto-generated role</text>
+
+  <!-- Expert 2 -->
+  <g filter="url(#shadow)">
+    <rect x="254" y="283" width="140" height="58" rx="9" fill="url(#expertGrad)" opacity="0.12" stroke="#a371f7" stroke-width="1.2"/>
+  </g>
+  <text x="324" y="306" text-anchor="middle" font-size="10.5" fill="#d2a8ff" font-weight="700">Expert 2</text>
+  <text x="324" y="322" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.75">Domain Specialist</text>
+  <text x="324" y="336" text-anchor="middle" font-size="8.5" fill="#a371f7" opacity="0.5">Auto-generated role</text>
+
+  <!-- Expert 3 (center) -->
+  <g filter="url(#shadow)">
+    <rect x="360" y="283" width="140" height="58" rx="9" fill="url(#expertGrad)" opacity="0.18" stroke="#a371f7" stroke-width="1.5"/>
+  </g>
+  <text x="430" y="306" text-anchor="middle" font-size="10.5" fill="#d2a8ff" font-weight="700">Expert 3</text>
+  <text x="430" y="322" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.75">Domain Specialist</text>
+  <text x="430" y="336" text-anchor="middle" font-size="8.5" fill="#a371f7" opacity="0.5">Auto-generated role</text>
+
+  <!-- Expert 4 -->
+  <g filter="url(#shadow)">
+    <rect x="468" y="283" width="140" height="58" rx="9" fill="url(#expertGrad)" opacity="0.12" stroke="#a371f7" stroke-width="1.2"/>
+  </g>
+  <text x="538" y="306" text-anchor="middle" font-size="10.5" fill="#d2a8ff" font-weight="700">Expert 4</text>
+  <text x="538" y="322" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.75">Domain Specialist</text>
+  <text x="538" y="336" text-anchor="middle" font-size="8.5" fill="#a371f7" opacity="0.5">Auto-generated role</text>
+
+  <!-- Expert 5 -->
+  <g filter="url(#shadow)">
+    <rect x="630" y="283" width="140" height="58" rx="9" fill="url(#expertGrad)" opacity="0.12" stroke="#a371f7" stroke-width="1.2"/>
+  </g>
+  <text x="700" y="306" text-anchor="middle" font-size="10.5" fill="#d2a8ff" font-weight="700">Expert 5</text>
+  <text x="700" y="322" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.75">Domain Specialist</text>
+  <text x="700" y="336" text-anchor="middle" font-size="8.5" fill="#a371f7" opacity="0.5">Auto-generated role</text>
+
+  <!-- Arrows: Experts → Cross-Check (fan in) -->
+  <path d="M 160 341 Q 210 385 370 402" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.5" marker-end="url(#arrowOrange)"/>
+  <path d="M 324 341 Q 355 375 385 402" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.5" marker-end="url(#arrowOrange)"/>
+  <line x1="430" y1="341" x2="430" y2="402" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.5" marker-end="url(#arrowOrange)"/>
+  <path d="M 538 341 Q 510 375 475 402" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.5" marker-end="url(#arrowOrange)"/>
+  <path d="M 700 341 Q 650 385 490 402" stroke="#ffa657" stroke-width="1.5" stroke-dasharray="4,3" fill="none" opacity="0.5" marker-end="url(#arrowOrange)"/>
+
+  <!-- ── CROSS-CHECK ── -->
+  <g filter="url(#shadow)">
+    <rect x="295" y="408" width="270" height="60" rx="10" fill="url(#crossGrad)" opacity="0.12" stroke="#ffa657" stroke-width="1.5"/>
+  </g>
+  <text x="430" y="432" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="700" letter-spacing="1">CROSS-CHECK COORDINATOR</text>
+  <text x="430" y="450" text-anchor="middle" font-size="9.5" fill="#ffa657" opacity="0.75">Finds contradictions &amp; agreements</text>
+  <text x="430" y="464" text-anchor="middle" font-size="9" fill="#ffa657" opacity="0.5">across all expert outputs</text>
+
+  <!-- Arrow: Cross-Check → Synthesizer -->
+  <line x1="430" y1="468" x2="430" y2="494" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6" marker-end="url(#arrowRed)"/>
+
+  <!-- ── SYNTHESIZER ── -->
+  <g filter="url(#shadow)">
+    <rect x="295" y="500" width="270" height="28" rx="8" fill="url(#synthGrad)" opacity="0.15" stroke="#f85149" stroke-width="1.5"/>
+  </g>
+  <text x="430" y="519" text-anchor="middle" font-size="11" fill="#f85149" font-weight="700" letter-spacing="1">SYNTHESIZER · FINAL VERDICT</text>
+
+  <!-- Step badges -->
+  <circle cx="560" cy="90" r="12" fill="#58a6ff" opacity="0.12" stroke="#58a6ff" stroke-width="1"/>
+  <text x="560" y="94" text-anchor="middle" font-size="9.5" fill="#58a6ff" font-weight="700">1</text>
+
+  <circle cx="590" cy="189" r="12" fill="#3fb950" opacity="0.12" stroke="#3fb950" stroke-width="1"/>
+  <text x="590" y="193" text-anchor="middle" font-size="9.5" fill="#3fb950" font-weight="700">2</text>
+
+  <circle cx="590" cy="312" r="12" fill="#a371f7" opacity="0.12" stroke="#a371f7" stroke-width="1"/>
+  <text x="590" y="316" text-anchor="middle" font-size="9.5" fill="#a371f7" font-weight="700">3</text>
+
+  <circle cx="590" cy="438" r="12" fill="#ffa657" opacity="0.12" stroke="#ffa657" stroke-width="1"/>
+  <text x="590" y="442" text-anchor="middle" font-size="9.5" fill="#ffa657" font-weight="700">4</text>
+
+  <circle cx="590" cy="514" r="12" fill="#f85149" opacity="0.12" stroke="#f85149" stroke-width="1"/>
+  <text x="590" y="518" text-anchor="middle" font-size="9.5" fill="#f85149" font-weight="700">5</text>
+</svg>
