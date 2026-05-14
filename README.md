@@ -13,42 +13,12 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ## Architecture
 
-```
-                     ┌──────────────┐
-                     │   User       │
-                     │   Input      │
-                     └──────┬───────┘
-                            │
-            ┌───────────────┼───────────────┐
-            │               │               │
-     ┌──────▼──────┐  ┌─────▼──────┐  ┌────▼──────────┐
-     │ Standard    │  │  Case      │  │  Case Study   │
-     │ Node Sel.   │  │  Files     │  │  Node Builder │
-     └──────┬──────┘  └─────┬──────┘  └────┬──────────┘
-            │               │               │
-            └───────────────┼───────────────┘
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-       ┌──────▼──────┐ ┌───▼─────┐ ┌─────▼──────┐
-       │  Expert 1   │ │ Expert 2│ │  Expert N  │
-       └──────┬──────┘ └───┬─────┘ └─────┬──────┘
-              │             │             │
-              └─────────────┼─────────────┘
-                            │
-                     ┌──────▼───────┐
-                     │ Cross-Check  │
-                     │ Coordinator  │
-                     └──────┬───────┘
-                            │
-                     ┌──────▼───────┐
-                     │  Synthesizer │
-                     │  (Verdict)   │
-                     └──────────────┘
-```
 
 ![Cognitus Architecture](./architecture.svg)
 
+## Pipeline
+
+![Cognitus Architecture](./pipeline.svg)
 
 | Step | Standard Mode | Case Study Mode |
 |------|---------------|-----------------|
