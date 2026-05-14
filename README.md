@@ -29,10 +29,6 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ---
 
-## Pipeline
-
-![Pipeline Steps](./pipeline.svg)
-## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
