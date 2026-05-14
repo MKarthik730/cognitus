@@ -35,6 +35,28 @@ export function connect(situation, sessionId, userId) {
   };
 }
 
+export function connectCaseStudy(data, sessionId) {
+  disconnect();
+  ws = new WebSocket(`${WS_BASE}/${sessionId}`);
+  ws.onopen = () => {
+    ws.send(JSON.stringify(data));
+  };
+  ws.onmessage = (msg) => {
+    try {
+      const event = JSON.parse(msg.data);
+      if (onEventCallback) onEventCallback(event);
+    } catch (e) {
+      console.error('Failed to parse WS message:', e);
+    }
+  };
+  ws.onerror = () => {
+    if (onEventCallback) onEventCallback({ type: 'error', message: 'WebSocket connection failed' });
+  };
+  ws.onclose = () => {
+    ws = null;
+  };
+}
+
 export function disconnect() {
   if (ws) {
     ws.close();

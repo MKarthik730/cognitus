@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from backend.app.api.routes import auth, sessions, analyze
+from backend.app.api.upload import router as upload_router
 from backend.app.api.websocket import router as ws_router
 from backend.app.core.config import settings
 from backend.app.services.hf_service import HFService
@@ -74,6 +75,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(analyze.router)
+app.include_router(upload_router)
 app.include_router(ws_router)
 
 
