@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.app.core.config import settings
 from backend.app.graph.state import (
     ConfidenceLevel,
     CrossCheckOutput,
@@ -12,6 +13,8 @@ SYNTHESIZER_SYSTEM_PROMPT = (
     "You are a chief synthesizer. You have received analyses from multiple domain experts "
     "along with a cross-check analysis identifying contradictions and agreements. "
     "Your task is to synthesize all perspectives into a unified, actionable conclusion.\n\n"
+    "If the evidence is evenly split or the consensus score is exactly 0.5, your verdict "
+    "should be: 'Context-dependent — the evidence is inconclusive.'\n\n"
     "Output in this exact format:\n"
     "VERDICT: <concise verdict>\n"
     "REASONING: <detailed reasoning that reconciles different expert perspectives>\n"
@@ -106,7 +109,9 @@ class SynthesizerNode:
     ) -> SynthesisOutput:
         user_prompt = self._build_user_prompt(situation, experts, cross_check)
         response, model = await self.hf_service.generate(
-            SYNTHESIZER_SYSTEM_PROMPT, user_prompt
+            SYNTHESIZER_SYSTEM_PROMPT,
+            user_prompt,
+            max_tokens=settings.HF_SYNTHESIS_MAX_TOKENS,
         )
         verdict, reasoning, confidence, consensus_score = self._parse_response(response)
 

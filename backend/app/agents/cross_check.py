@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import cast, get_args
+from typing import get_args
 
+from backend.app.core.config import settings
 from backend.app.graph.state import (
     Agreement,
     ConfidenceLevel,
     Contradiction,
     ContradictionType,
     CrossCheckOutput,
-    DomainName,
     ExpertOutput,
 )
 from backend.app.services.hf_service import HFService
@@ -25,7 +25,6 @@ CROSS_CHECK_SYSTEM_PROMPT = (
     "List all contradictions and agreements between every domain pair."
 )
 
-_VALID_DOMAINS: set[str] = set(get_args(DomainName))
 _VALID_CONFIDENCE: set[str] = set(get_args(ConfidenceLevel))
 _VALID_CONTRADICTION_TYPES: set[str] = set(get_args(ContradictionType))
 
@@ -54,7 +53,7 @@ def _parse_contradictions(text: str) -> list[Contradiction]:
         if len(parts) < 5:
             continue
         domain_a, domain_b, ctype, severity, description = parts
-        if domain_a not in _VALID_DOMAINS or domain_b not in _VALID_DOMAINS:
+        if not domain_a or not domain_b:
             continue
         if ctype not in _VALID_CONTRADICTION_TYPES:
             ctype = "partial"
@@ -62,10 +61,10 @@ def _parse_contradictions(text: str) -> list[Contradiction]:
             severity = "medium"
         results.append(
             Contradiction(
-                between=(cast(DomainName, domain_a), cast(DomainName, domain_b)),
-                type=cast(ContradictionType, ctype),
+                between=(domain_a, domain_b),
+                type=ctype,  # type: ignore[arg-type]
                 description=description,
-                severity=cast(ConfidenceLevel, severity),
+                severity=severity,  # type: ignore[arg-type]
             )
         )
     return results
@@ -80,12 +79,12 @@ def _parse_agreements(text: str) -> list[Agreement]:
         if len(parts) < 3:
             continue
         domain_a, domain_b, points_str = parts
-        if domain_a not in _VALID_DOMAINS or domain_b not in _VALID_DOMAINS:
+        if not domain_a or not domain_b:
             continue
         points = [p.strip() for p in points_str.split("|") if p.strip()]
         results.append(
             Agreement(
-                between=(cast(DomainName, domain_a), cast(DomainName, domain_b)),
+                between=(domain_a, domain_b),
                 points=points,
             )
         )
@@ -110,7 +109,9 @@ class CrossCheckNode:
     async def cross_check(self, experts: dict[str, ExpertOutput]) -> CrossCheckOutput:
         user_prompt = _build_user_prompt(experts)
         response, model = await self.hf_service.generate(
-            CROSS_CHECK_SYSTEM_PROMPT, user_prompt
+            CROSS_CHECK_SYSTEM_PROMPT,
+            user_prompt,
+            max_tokens=settings.HF_DEFAULT_MAX_TOKENS,
         )
         return CrossCheckOutput(
             contradictions=_parse_contradictions(response),

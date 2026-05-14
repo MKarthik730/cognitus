@@ -1,5 +1,6 @@
 from typing import get_args
 
+from backend.app.core.config import settings
 from backend.app.graph.state import DistributorOutput, DomainName
 from backend.app.services.hf_service import HFService
 
@@ -35,7 +36,9 @@ class DistributorNode:
 
     async def dispatch(self, situation: str) -> DistributorOutput:
         response, model = await self.hf_service.generate(
-            DISTRIBUTOR_SYSTEM_PROMPT, situation
+            DISTRIBUTOR_SYSTEM_PROMPT,
+            situation,
+            max_tokens=settings.HF_DEFAULT_MAX_TOKENS,
         )
         domains = self._parse_domains(response)
         return DistributorOutput(

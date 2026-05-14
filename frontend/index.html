@@ -1,13 +1,167 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cognitus — Multi-perspective AI Reasoning</title>
-  </head>
-  <body class="bg-gray-950 text-gray-100">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cognitus — Multi-perspective AI Reasoning</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <div id="app" class="app-layout">
+
+    <!-- LEFT PANEL -->
+    <aside id="left-panel" class="panel-left">
+      <div class="panel-left-inner">
+        <div class="brand">
+          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 4a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-2.5C8.8 10.8 8 9.5 8 8a4 4 0 0 1 4-4z"/>
+            <path d="M10 19h4"/>
+            <path d="M12 21v-3"/>
+          </svg>
+          <span class="brand-name">Cognitus</span>
+        </div>
+
+        <div class="mode-switcher">
+          <button class="mode-tab active" data-mode="standard">Standard</button>
+          <button class="mode-tab" data-mode="case-study">Case Study</button>
+        </div>
+
+        <div class="panel-section">
+          <div class="section-header">
+            <span class="section-title">Nodes</span>
+            <span id="node-count" class="section-badge">0</span>
+          </div>
+          <div id="node-list" class="node-list">
+            <div class="node-list-empty">No nodes selected yet</div>
+          </div>
+          <button id="btn-add-node" class="btn-ghost-dashed">+ Add Node</button>
+        </div>
+
+        <div id="case-files-section" class="panel-section hidden">
+          <div class="section-header">
+            <span class="section-title">Case Files</span>
+          </div>
+          <div id="drop-zone" class="drop-zone">
+            <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span class="drop-text">Drag & drop files here</span>
+            <span class="drop-hint">PDF, Audio, Markdown, Images</span>
+          </div>
+          <div id="file-chips" class="file-chips"></div>
+        </div>
+
+        <div class="panel-footer">
+          <button id="btn-settings" class="btn-icon" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER PANEL -->
+    <main id="center-panel" class="panel-center">
+      <div class="top-bar">
+        <span id="mode-badge" class="mode-badge">Standard</span>
+        <div class="question-bar">
+          <input id="question-input" type="text" class="question-input" placeholder="Describe a situation or ask a question..." />
+          <button id="btn-analyze" class="btn-primary">Analyze &rarr;</button>
+          <button id="btn-stop" class="btn-stop hidden">Stop</button>
+        </div>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="main-canvas" class="main-canvas"></canvas>
+        <div class="canvas-controls">
+          <button id="btn-zoom-in" class="btn-icon-sm" title="Zoom In">+</button>
+          <button id="btn-zoom-out" class="btn-icon-sm" title="Zoom Out">&minus;</button>
+          <button id="btn-fit" class="btn-icon-sm" title="Fit View">&#x21f0;</button>
+        </div>
+        <canvas id="minimap-canvas" class="minimap-canvas"></canvas>
+      </div>
+    </main>
+
+    <!-- RIGHT PANEL -->
+    <aside id="right-panel" class="panel-right">
+      <div class="panel-right-inner">
+        <div class="right-header">
+          <span class="right-title">Analysis</span>
+          <button id="btn-rerun" class="btn-icon" title="Re-run Analysis">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="right-tabs">
+          <button class="right-tab active" data-tab="verdict">Verdict</button>
+          <button class="right-tab" data-tab="outputs">Node Outputs</button>
+        </div>
+
+        <div id="tab-verdict" class="tab-content active">
+          <div id="placeholder-idle" class="placeholder-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+              <path d="M12 4a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-2.5C8.8 10.8 8 9.5 8 8a4 4 0 0 1 4-4z"/>
+              <path d="M10 19h4"/><path d="M12 21v-3"/>
+            </svg>
+            <span class="placeholder-text">Submit a situation to see the analysis</span>
+          </div>
+
+          <div id="verdict-content" class="verdict-content hidden">
+            <div class="verdict-card">
+              <div class="verdict-label">VERDICT</div>
+              <div id="verdict-value" class="verdict-value">—</div>
+            </div>
+
+            <div class="consensus-meter">
+              <div class="consensus-row">
+                <span class="consensus-label">Disagreement</span>
+                <span id="consensus-pct" class="consensus-pct">50%</span>
+                <span class="consensus-label">Consensus</span>
+              </div>
+              <div class="consensus-track">
+                <div id="consensus-fill" class="consensus-fill" style="width:50%"></div>
+              </div>
+            </div>
+
+            <div id="confidence-badge" class="confidence-badge medium">Medium</div>
+
+            <div class="reasoning-block">
+              <div class="reasoning-header">Reasoning</div>
+              <div id="reasoning-text" class="reasoning-text"></div>
+            </div>
+
+            <div id="tradeoffs-section" class="section-block hidden">
+              <div class="section-block-title">Key Trade-offs</div>
+              <div id="tradeoffs-list" class="tradeoffs-list"></div>
+            </div>
+
+            <div id="recommendations-section" class="section-block hidden">
+              <div class="section-block-title">Recommendations</div>
+              <div id="recommendations-grid" class="recommendations-grid"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-outputs" class="tab-content">
+          <div id="outputs-list" class="outputs-list">
+            <div class="node-list-empty">No outputs yet</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <div id="tooltip" class="tooltip hidden"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
 </html>

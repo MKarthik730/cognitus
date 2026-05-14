@@ -3,18 +3,7 @@ from __future__ import annotations
 from typing import TypedDict, Literal, NotRequired
 
 
-DomainName = Literal[
-    "legal",
-    "finance",
-    "medical",
-    "technology",
-    "education",
-    "science",
-    "business",
-    "ethics",
-    "psychology",
-    "sociology",
-]
+DomainName = str
 
 ConfidenceLevel = Literal["high", "medium", "low"]
 
@@ -31,6 +20,12 @@ PipelineStatus = Literal[
 ]
 
 
+class SelectedNode(TypedDict):
+    name: str
+    role: str
+    behavior: str
+
+
 class DistributorOutput(TypedDict):
     domains: list[DomainName]
     reasoning: str
@@ -38,7 +33,7 @@ class DistributorOutput(TypedDict):
 
 
 class ExpertOutput(TypedDict):
-    domain: DomainName
+    domain: str
     analysis: str
     confidence: ConfidenceLevel
     citations: NotRequired[list[str]]
@@ -47,14 +42,14 @@ class ExpertOutput(TypedDict):
 
 
 class Contradiction(TypedDict):
-    between: tuple[DomainName, DomainName]
+    between: tuple[str, str]
     type: ContradictionType
     description: str
     severity: ConfidenceLevel
 
 
 class Agreement(TypedDict):
-    between: tuple[DomainName, DomainName]
+    between: tuple[str, str]
     points: list[str]
 
 
@@ -86,8 +81,9 @@ class GraphMetadata(TypedDict):
 class CouncilState(TypedDict):
     situation: str
     metadata: GraphMetadata
+    selected_nodes: NotRequired[list[SelectedNode]]
     distributor: NotRequired[DistributorOutput]
-    experts: NotRequired[dict[DomainName, ExpertOutput]]
+    experts: NotRequired[dict[str, ExpertOutput]]
     cross_check: NotRequired[CrossCheckOutput]
     synthesis: NotRequired[SynthesisOutput]
     errors: NotRequired[list[str]]

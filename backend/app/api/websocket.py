@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 from backend.app.core.config import settings
 from backend.app.graph.state import PipelineStatus
 from backend.app.services.hf_service import HFService
+from backend.app.services.node_selector import NodeSelector
 from backend.app.graph.council_graph import CouncilGraph
 
 logger = logging.getLogger(__name__)
@@ -30,47 +31,47 @@ async def _stream_graph_events(
     user_id: int,
     council_graph: CouncilGraph,
 ) -> None:
-    async def on_node_start(node_name: str, state: dict[str, Any]) -> None:
+    async def on_node_start(node_name: str, status_text: str) -> None:
         await websocket.send_json(
             {
                 "type": "node_start",
                 "node": node_name,
-                "status": state.get("status", "unknown"),
+                "status": status_text,
             }
         )
 
-    distributor_node = council_graph.distributor
-    cross_check_node = council_graph.cross_checker
-    synthesizer_node = council_graph.synthesizer
+    selector = NodeSelector(council_graph.hf_service)
 
-    await on_node_start("distributor", {"status": "distributing"})
-    distributor_output = await distributor_node.dispatch(situation)
+    await websocket.send_json({"type": "node_selection_start"})
+    selected_nodes = await selector.select_nodes(situation)
     await websocket.send_json(
         {
-            "type": "node_complete",
-            "node": "distributor",
-            "data": {
-                "domains": distributor_output["domains"],
-                "reasoning": distributor_output["reasoning"],
-                "model_used": distributor_output["model_used"],
-            },
-            "status": "expert_processing",
+            "type": "node_selection_complete",
+            "nodes": selected_nodes,
         }
     )
 
-    await on_node_start("experts", {"status": "expert_processing"})
+    cross_check_node = council_graph.cross_checker
+    synthesizer_node = council_graph.synthesizer
+
+    expert_behaviors: dict[str, str] = {
+        n["name"]: n["behavior"] for n in selected_nodes
+    }
+    domains = [n["name"] for n in selected_nodes]
+
+    await on_node_start("experts", "expert_processing")
     import asyncio
     from backend.app.agents.expert_node import ExpertNode
 
-    domains = distributor_output["domains"]
     expert_tasks = {}
     for domain in domains:
-        node = ExpertNode(domain, council_graph.hf_service)
+        behavior = expert_behaviors.get(domain)
+        node = ExpertNode(domain, council_graph.hf_service, behavior=behavior)
         expert_tasks[domain] = node.analyze(situation)
 
-    results = await asyncio.gather(*expert_tasks.values(), return_exceptions=True)
+    raw_results = await asyncio.gather(*expert_tasks.values(), return_exceptions=True)
     experts: dict[str, Any] = {}
-    for domain, result in zip(domains, results):
+    for domain, result in zip(domains, raw_results):
         if isinstance(result, Exception):
             await websocket.send_json(
                 {
@@ -80,20 +81,21 @@ async def _stream_graph_events(
                 }
             )
         else:
-            experts[domain] = result
+            output = result
+            experts[domain] = output
             await websocket.send_json(
                 {
                     "type": "expert_complete",
                     "domain": domain,
                     "data": {
-                        "analysis": result["analysis"],
-                        "confidence": result["confidence"],
-                        "model_used": result["model_used"],
+                        "analysis": output["analysis"],
+                        "confidence": output["confidence"],
+                        "model_used": output["model_used"],
                     },
                 }
             )
 
-    await on_node_start("cross_check", {"status": "cross_checking"})
+    await on_node_start("cross_check", "cross_checking")
     cross_check_output = await cross_check_node.cross_check(experts)
     await websocket.send_json(
         {
@@ -107,7 +109,7 @@ async def _stream_graph_events(
         }
     )
 
-    await on_node_start("synthesizer", {"status": "synthesizing"})
+    await on_node_start("synthesizer", "synthesizing")
     synthesis_output = await synthesizer_node.synthesize(
         situation, experts, cross_check_output
     )

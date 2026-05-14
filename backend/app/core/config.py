@@ -12,8 +12,11 @@ class Settings(BaseSettings):
     HF_PRIMARY_MODEL: str = "meta-llama/Llama-3.2-1B-Instruct"
     HF_FALLBACK_1: str = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
     HF_FALLBACK_2: str = "katanemo/Arch-Router-1.5B"
-    HF_MAX_NEW_TOKENS: int = 1024
-    HF_TIMEOUT: int = 30
+    HF_DEFAULT_MAX_TOKENS: int = 512
+    HF_EXPERT_MAX_TOKENS: int = 512
+    HF_SYNTHESIS_MAX_TOKENS: int = 2048
+    HF_NODE_SELECTOR_MAX_TOKENS: int = 1024
+    HF_TIMEOUT: int = 60
     HF_DAILY_LIMIT: int = 800
     HF_HOURLY_LIMIT: int = 50
 

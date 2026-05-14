@@ -28,23 +28,30 @@ queue_worker: QueueWorker | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global redis, queue_worker
-    redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
-    hf_service = HFService()
-    queue_worker = QueueWorker(redis, hf_service)
-
-    worker_task = asyncio.create_task(queue_worker.start())
-    logger.info("Queue worker started")
+    try:
+        redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        await redis.ping()
+        hf_service = HFService()
+        queue_worker = QueueWorker(redis, hf_service)
+        worker_task = asyncio.create_task(queue_worker.start())
+        logger.info("Queue worker started")
+    except Exception as e:
+        logger.warning("Redis unavailable, running without queue worker: %s", e)
+        redis = None
+        queue_worker = None
+        worker_task = None
 
     yield
 
-    if queue_worker:
+    if queue_worker is not None:
         await queue_worker.stop()
-    worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
-    if redis:
+    if worker_task is not None:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+    if redis is not None:
         await redis.close()
     logger.info("Shutdown complete")
 

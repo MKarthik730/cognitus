@@ -36,7 +36,7 @@ class HFService:
         wait=wait_exponential(multiplier=2, min=2, max=8),
         retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
     )
-    async def _chat(self, model: str, system: str, user: str) -> str:
+    async def _chat(self, model: str, system: str, user: str, max_tokens: int) -> str:
         headers = {
             "Authorization": f"Bearer {settings.HF_API_TOKEN}",
             "Content-Type": "application/json",
@@ -47,7 +47,7 @@ class HFService:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "max_tokens": settings.HF_MAX_NEW_TOKENS,
+            "max_tokens": max_tokens,
             "temperature": 0.3,
         }
 
@@ -69,11 +69,17 @@ class HFService:
             content = data["choices"][0]["message"]["content"]
             return content or ""
 
-    async def generate(self, system: str, user: str) -> tuple[str, str]:
+    async def generate(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int | None = None,
+    ) -> tuple[str, str]:
+        max_tokens = max_tokens or settings.HF_DEFAULT_MAX_TOKENS
         last_error: Optional[Exception] = None
         for model in self._models:
             try:
-                text = await self._chat(model, system, user)
+                text = await self._chat(model, system, user, max_tokens)
                 return text.strip(), model
             except Exception as e:
                 logger.warning("Model %s failed: %s", model, e)
