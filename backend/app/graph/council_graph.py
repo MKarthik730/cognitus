@@ -14,8 +14,6 @@ from backend.app.agents.synthesizer import SynthesizerNode
 from backend.app.graph.state import CouncilState, DomainName
 from backend.app.services.hf_service import HFService
 
-EventCallback = callable[[str, dict[str, Any]], None] | None
-
 
 class CouncilGraph:
     def __init__(self, hf_service: HFService) -> None:
@@ -28,16 +26,16 @@ class CouncilGraph:
     def _build_graph(self) -> StateGraph:
         workflow = StateGraph(CouncilState)
 
-        workflow.add_node("distributor", self._run_distributor)
-        workflow.add_node("experts", self._run_experts)
-        workflow.add_node("cross_check", self._run_cross_check)
-        workflow.add_node("synthesizer", self._run_synthesizer)
+        workflow.add_node("run_distributor", self._run_distributor)
+        workflow.add_node("run_experts", self._run_experts)
+        workflow.add_node("run_cross_check", self._run_cross_check)
+        workflow.add_node("run_synthesizer", self._run_synthesizer)
 
-        workflow.set_entry_point("distributor")
-        workflow.add_edge("distributor", "experts")
-        workflow.add_edge("experts", "cross_check")
-        workflow.add_edge("cross_check", "synthesizer")
-        workflow.add_edge("synthesizer", END)
+        workflow.set_entry_point("run_distributor")
+        workflow.add_edge("run_distributor", "run_experts")
+        workflow.add_edge("run_experts", "run_cross_check")
+        workflow.add_edge("run_cross_check", "run_synthesizer")
+        workflow.add_edge("run_synthesizer", END)
 
         return workflow.compile()
 

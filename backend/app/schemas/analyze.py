@@ -9,6 +9,7 @@ class AnalyzeRequest(BaseModel):
 
 
 class ExpertResponseSchema(BaseModel):
+    model_config = {"protected_namespaces": ()}
     domain: str
     analysis_text: str
     confidence: str
