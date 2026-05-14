@@ -3,7 +3,6 @@ const subscribers = new Map();
 let state = {
   situation: '',
   status: 'idle',
-  mode: 'standard',
   activeTab: 'verdict',
   error: null,
   activeNode: null,
@@ -19,8 +18,6 @@ let state = {
   consensusScore: 0.5,
   synthesis: null,
 
-  files: [],
-  nodes: [],
 };
 
 export function getState() {

@@ -16,22 +16,19 @@ export function init() {
     if (e.key === 'Enter') startAnalysis();
   });
   document.getElementById('btn-stop').addEventListener('click', stopAnalysis);
-  document.querySelectorAll('.mode-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchMode(tab.dataset.mode));
-  });
+
   document.querySelectorAll('.right-tab').forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
   document.getElementById('btn-zoom-in').addEventListener('click', zoomIn);
   document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
   document.getElementById('btn-fit').addEventListener('click', fitView);
-  document.getElementById('btn-add-node').addEventListener('click', openNodeSelector);
+
   document.getElementById('btn-rerun').addEventListener('click', rerunAnalysis);
   document.getElementById('btn-settings').addEventListener('click', () => {
     alert('Settings panel coming soon.');
   });
 
-  setupFileDropZone();
   setupOutputsDelegation();
 
   subscribe('status', updateButtons);
@@ -89,7 +86,6 @@ function startAnalysis() {
     agreements: [],
     consensusScore: 0.5,
     synthesis: null,
-    files: [],
   });
 
   currentSessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -123,15 +119,6 @@ function rerunAnalysis() {
   connect(s.situation, currentSessionId, 0);
 }
 
-function switchMode(mode) {
-  setState({ mode });
-  document.querySelectorAll('.mode-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.mode === mode);
-  });
-  document.getElementById('case-files-section').classList.toggle('hidden', mode !== 'case-study');
-  updateModeBadge();
-}
-
 function switchTab(tab) {
   setState({ activeTab: tab });
   document.querySelectorAll('.right-tab').forEach(t => {
@@ -140,10 +127,6 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(t => {
     t.classList.toggle('active', t.id === 'tab-' + tab);
   });
-}
-
-function openNodeSelector() {
-  alert('Node selector coming soon — add custom expert nodes for Case Study mode.');
 }
 
 function updateButtons(status) {
@@ -156,6 +139,7 @@ function updateButtons(status) {
 function updateModeBadge() {
   const s = getState();
   const badge = document.getElementById('mode-badge');
+  if (!badge) return;
   const status = s.status;
   const activeNode = s.activeNode;
 
@@ -181,9 +165,8 @@ function updateModeBadge() {
     badge.textContent = 'Failed';
     badge.className = 'mode-badge';
   } else {
-    badge.textContent = s.mode === 'case-study' ? 'Case Study' : 'Standard';
+    badge.textContent = 'Standard';
     badge.className = 'mode-badge';
-    if (s.mode === 'case-study') badge.classList.add('case-study');
   }
 }
 
@@ -359,30 +342,6 @@ function showError(message) {
     + '</svg>'
     + '<span class="placeholder-text" style="color:var(--danger)">' + message + '</span>';
   placeholder.classList.remove('hidden');
-}
-
-function setupFileDropZone() {
-  const zone = document.getElementById('drop-zone');
-  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    const files = Array.from(e.dataTransfer.files);
-    const chips = document.getElementById('file-chips');
-    files.forEach(file => {
-      const chip = document.createElement('div');
-      chip.className = 'file-chip';
-      const ext = file.name.split('.').pop() || '';
-      chip.innerHTML = '<svg class="file-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
-        + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
-        + '<polyline points="14 2 14 8 20 8"/>'
-        + '</svg>'
-        + file.name
-        + '<span class="file-chip-type">' + ext.toUpperCase() + '</span>';
-      chips.appendChild(chip);
-    });
-  });
 }
 
 function setupOutputsDelegation() {
