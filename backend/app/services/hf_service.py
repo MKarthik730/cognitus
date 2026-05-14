@@ -69,6 +69,48 @@ class HFService:
             content = data["choices"][0]["message"]["content"]
             return content or ""
 
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=2, min=2, max=8),
+        retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+    )
+    async def _chat_with_image(
+        self, model: str, system: str, user: str, image_data_uri: str, max_tokens: int
+    ) -> str:
+        headers = {
+            "Authorization": f"Bearer {settings.HF_API_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": f"{model}:fastest",
+            "messages": [
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user},
+                        {"type": "image_url", "image_url": {"url": image_data_uri}},
+                    ],
+                },
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.3,
+        }
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(settings.HF_TIMEOUT)
+        ) as client:
+            response = await client.post(ROUTER_URL, headers=headers, json=payload)
+            if response.status_code == 400:
+                logger.error("HF API 400 on model %s: %s", model, response.text[:500])
+                raise RuntimeError(f"Model {model} returned 400: {response.text[:200]}")
+            if response.status_code == 429:
+                logger.warning("HF API rate limited on model %s", model)
+                raise RuntimeError(f"Rate limited on model {model}")
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return content or ""
+
     async def generate(
         self,
         system: str,
@@ -85,3 +127,37 @@ class HFService:
                 logger.warning("Model %s failed: %s", model, e)
                 last_error = e
         raise RuntimeError("All HuggingFace models failed") from last_error
+
+    async def generate_with_image(
+        self,
+        system: str,
+        user: str,
+        image_data_uri: str,
+        max_tokens: int | None = None,
+    ) -> str:
+        max_tokens = max_tokens or settings.HF_DEFAULT_MAX_TOKENS
+        last_error: Optional[Exception] = None
+        for model in self._models:
+            try:
+                text = await self._chat_with_image(
+                    model, system, user, image_data_uri, max_tokens
+                )
+                return text.strip()
+            except Exception as e:
+                logger.warning("Model %s failed for image: %s", model, e)
+                last_error = e
+        raise RuntimeError("All models failed for image analysis") from last_error
+
+    async def summarize_text(
+        self, text: str, filename: str = "document", max_length: int = 6000
+    ) -> str:
+        if len(text) <= max_length:
+            return text
+        system = (
+            "You are a precise document analyst. Summarize this document preserving "
+            "all factual details, data points, names, numbers, and key arguments. "
+            "Maintain the original meaning and avoid adding interpretations."
+        )
+        user = f"{filename}: {text}"
+        result, _ = await self.generate(system, user, max_tokens=1024)
+        return result.strip()

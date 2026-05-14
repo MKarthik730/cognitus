@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 <body>
   <div id="app" class="app-layout">
@@ -34,6 +36,40 @@
           <div id="node-list" class="node-list">
             <div class="node-list-empty">No nodes selected yet</div>
           </div>
+          <button id="btn-add-node" class="btn-ghost-dashed">+ Add Node</button>
+        </div>
+
+        <div id="case-files-section" class="panel-section hidden">
+          <div class="section-header">
+            <span class="section-title">Case Files</span>
+          </div>
+          <div id="drop-zone" class="drop-zone">
+            <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div class="drop-zone-text">
+              <span class="drop-text">Drop files here or click to browse</span>
+              <span class="drop-supported">PDF, PNG, JPG, WEBP, MD, TXT, DOCX, CSV</span>
+            </div>
+          </div>
+          <div id="file-chips" class="file-chips"></div>
+        </div>
+
+        <div id="node-builder-section" class="panel-section hidden">
+          <div class="section-header">
+            <span class="section-title">Nodes</span>
+            <div class="section-header-right">
+              <span id="case-node-count" class="section-badge">0</span>
+              <div id="presets-wrapper" style="position:relative">
+                <button id="btn-presets" class="btn-icon-sm" title="Templates">+</button>
+                <div id="presets-dropdown" class="preset-dropdown hidden"></div>
+              </div>
+            </div>
+          </div>
+          <div id="case-node-list" class="case-node-list"></div>
+          <button id="btn-add-case-node" class="btn-ghost-dashed">+ Add Node</button>
         </div>
 
         <div class="panel-footer">
@@ -53,6 +89,7 @@
         <span id="mode-badge" class="mode-badge">Standard</span>
         <div class="question-bar">
           <input id="question-input" type="text" class="question-input" placeholder="Describe a situation or ask a question..." />
+          <input id="case-question-input" type="text" class="question-input hidden" placeholder="Enter a guiding question for the panel..." />
           <button id="btn-analyze" class="btn-primary">Analyze &rarr;</button>
           <button id="btn-stop" class="btn-stop hidden">Stop</button>
         </div>
@@ -128,12 +165,51 @@
               <div class="section-block-title">Recommendations</div>
               <div id="recommendations-grid" class="recommendations-grid"></div>
             </div>
+            <div id="condensed-banner" class="condensed-banner hidden">
+              <span class="condensed-banner-label">Condensed</span>
+              <span class="condensed-banner-text">Case files were condensed to fit analysis limits.</span>
+            </div>
+            <div id="critical-findings-section" class="case-findings-card warning hidden">
+              <div class="findings-header">&#9888; Critical Findings</div>
+              <div id="critical-findings-list" class="findings-list"></div>
+            </div>
+            <div id="unresolved-section" class="case-findings-card danger hidden">
+              <div class="findings-header">&#9888; Unresolved</div>
+              <div id="unresolved-list" class="findings-list"></div>
+            </div>
+            <div id="case-recommendations-section" class="section-block hidden">
+              <div class="section-block-title">Recommendations</div>
+              <div id="case-recommendations-list" class="numbered-list"></div>
+            </div>
           </div>
         </div>
 
         <div id="tab-outputs" class="tab-content">
           <div id="outputs-list" class="outputs-list">
             <div class="node-list-empty">No outputs yet</div>
+          </div>
+          <div id="crosscheck-section" class="crosscheck-card hidden" style="margin-top:12px">
+            <div class="crosscheck-header">Cross-Check</div>
+            <div id="crosscheck-agreements" class="crosscheck-section hidden">
+              <div class="crosscheck-section-title">Consensus</div>
+              <div id="crosscheck-agreements-list"></div>
+            </div>
+            <div id="crosscheck-conflicts" class="crosscheck-section hidden">
+              <div class="crosscheck-section-title">Conflicts</div>
+              <div id="crosscheck-conflicts-list"></div>
+            </div>
+            <div id="crosscheck-strongest" class="crosscheck-section hidden">
+              <div class="crosscheck-section-title">Strongest Argument</div>
+              <div class="crosscheck-item" id="crosscheck-strongest-text"></div>
+            </div>
+            <div id="crosscheck-unanswered" class="crosscheck-section hidden">
+              <div class="crosscheck-section-title">Unanswered</div>
+              <div class="crosscheck-item" id="crosscheck-unanswered-text"></div>
+            </div>
+            <div id="crosscheck-quality" class="crosscheck-section hidden">
+              <div class="crosscheck-section-title">Quality</div>
+              <div class="crosscheck-item" id="crosscheck-quality-text"></div>
+            </div>
           </div>
         </div>
       </div>

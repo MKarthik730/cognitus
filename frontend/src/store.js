@@ -18,6 +18,15 @@ let state = {
   consensusScore: 0.5,
   synthesis: null,
 
+  caseStudy: {
+    files: [],
+    nodes: [],
+    guidingQuestion: '',
+    caseContext: '',
+    contextCondensed: false,
+    analysisStatus: 'idle',
+    result: null,
+  },
 };
 
 export function getState() {
@@ -127,6 +136,106 @@ export function handleWsEvent(event) {
 
     case 'expert_error':
       s.error = `Expert ${event.domain} failed: ${event.error}`;
+      break;
+
+    case 'case_node_start':
+      s.activeNode = event.node;
+      s.caseStudy = {
+        ...s.caseStudy,
+        analysisStatus: event.status || 'analyzing',
+        step: event.status || 'analyzing',
+      };
+      break;
+
+    case 'case_expert_complete':
+      if (event.domain && event.data) {
+        const prev = s.caseStudy.result?.nodeResults || [];
+        s.caseStudy = {
+          ...s.caseStudy,
+          analysisStatus: 'analyzing',
+          result: {
+            ...(s.caseStudy.result || {}),
+            nodeResults: [
+              ...prev,
+              {
+                domain: event.domain,
+                confidence: event.data.confidence || 'medium',
+                position: event.data.position || '',
+                keyFindings: event.data.keyFindings || '',
+                concerns: event.data.concerns || '',
+                reasoning: event.data.reasoning || '',
+                model_used: event.data.model_used || '',
+              },
+            ],
+          },
+        };
+      }
+      break;
+
+    case 'case_cross_check':
+      if (event.status === 'cross_checking') {
+        s.caseStudy = { ...s.caseStudy, analysisStatus: 'crosschecking' };
+      } else if (event.data) {
+        s.caseStudy = {
+          ...s.caseStudy,
+          analysisStatus: 'crosschecking',
+          result: {
+            ...(s.caseStudy.result || {}),
+            crossCheck: event.data,
+          },
+        };
+      }
+      break;
+
+    case 'case_synthesize':
+      if (event.status === 'synthesizing') {
+        s.caseStudy = { ...s.caseStudy, analysisStatus: 'synthesizing' };
+      } else if (event.data) {
+        s.synthesis = {
+          verdict: event.data.verdict || '',
+          reasoning: event.data.reasoning || '',
+          confidence: event.data.confidence || 'medium',
+          consensus_score: event.data.consensus_score || 0.5,
+          criticalFindings: event.data.criticalFindings || [],
+          unresolvedDisagreements: event.data.unresolvedDisagreements || [],
+          recommendations: event.data.recommendations || [],
+        };
+        s.caseStudy = {
+          ...s.caseStudy,
+          analysisStatus: 'synthesizing',
+        };
+      }
+      break;
+
+    case 'case_complete':
+      s.status = 'completed';
+      s.activeNode = null;
+      s.caseStudy = {
+        ...s.caseStudy,
+        analysisStatus: 'completed',
+      };
+      if (event.data) {
+        if (event.data.synthesis) {
+          s.synthesis = {
+            verdict: event.data.synthesis.verdict || event.data.synthesis.verdict || '',
+            reasoning: event.data.synthesis.reasoning || '',
+            confidence: event.data.synthesis.confidence || 'medium',
+            consensus_score: event.data.crossCheck?.consensus_score || 0.5,
+          };
+        }
+        if (event.data.crossCheck) {
+          s.contradictions = [];
+          s.agreements = [];
+          s.consensusScore = event.data.crossCheck.consensus_score || 0.5;
+        }
+        if (event.data.experts) {
+          s.experts = Object.entries(event.data.experts).map(([domain, data]) => ({
+            domain,
+            analysis: data.reasoning || '',
+            confidence: data.confidence || 'medium',
+          }));
+        }
+      }
       break;
 
     case 'complete':
