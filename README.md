@@ -6,59 +6,59 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 
 ## Architecture
 
-<div align="center">
+```
+                    ┌──────────────┐
+                    │   User       │
+                    │   Input      │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │ Distributor  │
+                    │ (Domain Sel) │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+       ┌──────▼─────┐ ┌───▼────┐ ┌────▼──────┐
+       │ Expert 1   │ │Expert 2│ │ Expert N  │
+       │ (Legal)    │ │(Finance)│ │(Medical)  │
+       └──────┬─────┘ └───┬────┘ └────┬──────┘
+              │            │            │
+              └────────────┼────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │ Cross-Check  │
+                    │ Coordinator  │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Synthesizer │
+                    │  (Verdict)   │
+                    └──────────────┘
+```
 
-### 🧭 Step 1 — Distribution
+### Pipeline Steps
 
-![Distributor](https://img.shields.io/badge/🧭_Distributor-Domain_Selector-4A90D9?style=for-the-badge)
-
-*Routes the input to the most relevant expert domains*
-
----
-
-### 🧠 Step 2 — Expert Analysis (Parallel)
-
-| ![Legal](https://img.shields.io/badge/⚖️_Expert_1-Legal-7B68EE?style=for-the-badge) | ![Finance](https://img.shields.io/badge/💹_Expert_2-Finance-2ECC71?style=for-the-badge) | ![Medical](https://img.shields.io/badge/🩺_Expert_N-Medical-E74C3C?style=for-the-badge) |
-|:---:|:---:|:---:|
-| Analyzes legal risk & compliance | Evaluates financial implications | Assesses health & safety factors |
-
-*Each expert analyzes from their domain's lens — simultaneously*
-
----
-
-### 🔍 Step 3 — Cross-Check
-
-![CrossCheck](https://img.shields.io/badge/🔍_Cross--Check_Coordinator-Contradiction_Finder-F39C12?style=for-the-badge)
-
-*Finds conflicts, gaps, and disagreements across expert outputs*
-
----
-
-### ✅ Step 4 — Synthesis
-
-![Synthesizer](https://img.shields.io/badge/✅_Chief_Synthesizer-Final_Verdict-1ABC9C?style=for-the-badge)
-
-*Produces a unified, actionable conclusion*
-
-</div>
-
----
+| Step | Node | Description |
+|------|------|-------------|
+| 1 | **Distributor** | Classifies input and selects 3-5 most relevant expert domains |
+| 2 | **Experts** (parallel) | Each domain expert analyzes from their specialized perspective |
+| 3 | **Cross-Check** | Finds contradictions and agreements across all expert outputs |
+| 4 | **Synthesizer** | Produces a unified verdict reconciling all perspectives |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | LLM Provider | HuggingFace Inference API |
-| LLM Wrapper | langchain-huggingface (HuggingFaceEndpoint) |
 | Orchestration | LangGraph |
-| Backend | FastAPI + uvicorn |
+| Backend | FastAPI + Uvicorn |
 | WebSockets | FastAPI WebSocket + asyncio |
-| Database | PostgreSQL (async via asyncpg) |
+| Database | PostgreSQL 16 (async via asyncpg) |
 | ORM | SQLAlchemy 2.0 async |
-| Cache | Redis |
-| Search | FAISS (local vector store) |
+| Cache | Redis 7 |
 | Auth | JWT + bcrypt |
-| Frontend | React + Vite + TypeScript |
+| Frontend | React 18 + Vite + TypeScript |
 | Graph UI | React Flow |
 | Animation | Framer Motion |
 | State | Zustand |
@@ -69,7 +69,7 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 
 - Python 3.11+
 - Node.js 20+
-- Docker & Docker Compose (for PostgreSQL + Redis)
+- Docker & Docker Compose
 - HuggingFace API token ([get one free](https://huggingface.co/settings/tokens))
 
 ## Quick Start
@@ -79,19 +79,26 @@ Cognitus routes any situation or question through multiple domain-expert AI agen
 git clone https://github.com/MKarthik730/cognitus.git
 cd cognitus
 
-# Backend setup
+# Environment
+cp .env.example .env
+# Edit .env with your HF_API_TOKEN and a SECRET_KEY
+
+# Start everything with Docker
+docker compose up --build
+```
+
+### Manual Development Setup
+
+```bash
+# Backend
 python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r backend/requirements.txt
 
-# Frontend setup
+# Frontend
 cd frontend
 npm install
 cd ..
-
-# Environment
-cp .env.example .env
-# Edit .env with your HF_API_TOKEN
 
 # Start infrastructure
 docker compose up -d postgres redis
@@ -99,35 +106,8 @@ docker compose up -d postgres redis
 # Run backend
 uvicorn backend.main:app --reload --port 8000
 
-# Run frontend (in a new terminal)
+# Run frontend (separate terminal)
 cd frontend && npm run dev
-```
-
-## Project Structure
-
-```
-cognitus/
-├── backend/
-│   ├── app/
-│   │   ├── agents/         # LLM-powered agent nodes
-│   │   ├── graph/          # LangGraph state machine
-│   │   ├── api/            # FastAPI routes + WebSocket
-│   │   ├── core/           # Config, DB, security
-│   │   ├── services/       # HF API, rate limiter, cache, retrieval
-│   │   ├── models/         # SQLAlchemy ORM models
-│   │   └── schemas/        # Pydantic schemas
-│   ├── main.py
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── stores/         # Zustand stores
-│   │   └── hooks/          # Custom hooks
-│   └── package.json
-├── postgres/
-│   └── init.sql
-├── docker-compose.yml
-└── .env.example
 ```
 
 ## API Endpoints
@@ -142,16 +122,81 @@ cognitus/
 | DELETE | `/api/sessions/{id}` | Delete session |
 | POST | `/api/analyze` | Run council analysis |
 | GET | `/api/analyze/{id}` | Get completed analysis |
-| WS | `/ws/{situation_id}` | Real-time streaming |
-| GET | `/api/nodes` | List expert domains |
-| POST | `/api/nodes/custom` | Create custom expert |
+| WS | `/ws/{session_id}` | Real-time streaming graph events |
+| GET | `/api/nodes` | List available expert domains |
+| GET | `/health` | Health check |
+
+## Project Structure
+
+```
+cognitus/
+├── backend/
+│   ├── app/
+│   │   ├── agents/         # LLM-powered agent nodes
+│   │   │   ├── distributor.py
+│   │   │   ├── expert_node.py
+│   │   │   ├── cross_check.py
+│   │   │   └── synthesizer.py
+│   │   ├── graph/          # LangGraph state machine
+│   │   │   ├── state.py
+│   │   │   └── council_graph.py
+│   │   ├── api/            # FastAPI routes + WebSocket
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── sessions.py
+│   │   │   │   └── analyze.py
+│   │   │   └── websocket.py
+│   │   ├── core/           # Config, DB, security
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   └── security.py
+│   │   ├── services/       # HF API, rate limiter, cache
+│   │   │   ├── hf_service.py
+│   │   │   ├── rate_limiter.py
+│   │   │   ├── cache.py
+│   │   │   └── queue_worker.py
+│   │   ├── models/         # SQLAlchemy ORM models (7 tables)
+│   │   └── schemas/        # Pydantic request/response schemas
+│   ├── main.py
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Graph/       # React Flow canvas + nodes
+│   │   │   ├── QueryBar.tsx
+│   │   │   ├── ConsensusMeter.tsx
+│   │   │   ├── SynthesisPanel.tsx
+│   │   │   └── RateLimitBanner.tsx
+│   │   ├── stores/          # Zustand state management
+│   │   ├── hooks/           # WebSocket hook
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── vite.config.ts
+├── postgres/
+│   └── init.sql
+├── docker-compose.yml
+└── .env.example
+```
 
 ## Rate Limits
 
-HuggingFace free tier limits:
-- ~1000 requests/day per token
-- ~1 req/sec burst rate
-- Cortex Council enforces: 800 requests/day global, 50/hour per user
+HuggingFace free tier limits enforced by the platform:
+- 800 requests/day global
+- 50 requests/hour per user
+- 1 request per 2 seconds burst
+
+## Database Schema
+
+7 tables:
+- `users` — authentication and profiles
+- `sessions` — user query sessions
+- `analyses` — per-session analysis runs
+- `expert_responses` — individual expert outputs
+- `contradictions` — cross-check contradictions
+- `agreements` — cross-check agreements
+- `api_usage_log` — rate limit tracking
 
 ## License
 
