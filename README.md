@@ -20,20 +20,10 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ![Cognitus Architecture](./pipeline.svg)
 
-| Step | Standard Mode | Case Study Mode |
-|------|---------------|-----------------|
-| 0 | — | Upload & extract files (PDF/Image/DOCX/TXT) |
-| 1 | Node Selector picks 3–5 experts dynamically | User defines 2–6 custom expert nodes with behaviors |
-| 2 | — | Context pipeline summarizes files if over token limit |
-| 3 | All experts analyze in parallel | Same, with case context injected |
-| 4 | Cross-Check finds contradictions | Same |
-| 5 | Synthesizer produces unified verdict | Same |
+
 
 ---
 
-## Pipeline
-
-![Pipeline Steps](./pipeline.svg)
 ## Tech Stack
 
 | Layer | Technology |
