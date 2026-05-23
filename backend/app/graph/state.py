@@ -36,9 +36,15 @@ class ExpertOutput(TypedDict):
     domain: str
     analysis: str
     confidence: ConfidenceLevel
+    position: NotRequired[str]
+    reasoning: NotRequired[str]
+    key_findings: NotRequired[list[str]]
+    concerns: NotRequired[list[str]]
+    confidence_score: NotRequired[int]
     citations: NotRequired[list[str]]
     model_used: str
     processing_time_ms: int
+    revision: NotRequired[str | None]
 
 
 class Contradiction(TypedDict):
