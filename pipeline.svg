@@ -1,91 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 160" width="860" height="160" font-family="'Segoe UI', system-ui, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 230" width="960" height="230" font-family="'Segoe UI', system-ui, sans-serif">
   <defs>
     <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#0d1117"/>
-      <stop offset="100%" style="stop-color:#161b22"/>
+      <stop offset="0%" style="stop-color:#0d1117"/><stop offset="100%" style="stop-color:#161b22"/>
     </linearGradient>
-    <linearGradient id="step1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#58a6ff;stop-opacity:0.18"/>
-      <stop offset="100%" style="stop-color:#58a6ff;stop-opacity:0.06"/>
-    </linearGradient>
-    <linearGradient id="step2" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#a371f7;stop-opacity:0.18"/>
-      <stop offset="100%" style="stop-color:#a371f7;stop-opacity:0.06"/>
-    </linearGradient>
-    <linearGradient id="step3" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffa657;stop-opacity:0.18"/>
-      <stop offset="100%" style="stop-color:#ffa657;stop-opacity:0.06"/>
-    </linearGradient>
-    <linearGradient id="step4" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#f85149;stop-opacity:0.18"/>
-      <stop offset="100%" style="stop-color:#f85149;stop-opacity:0.06"/>
-    </linearGradient>
+    <filter id="sh2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/></filter>
     <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
       <path d="M0,1 L0,6 L7,3.5 z" fill="#30363d"/>
     </marker>
-    <filter id="sh2">
-      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
-    </filter>
   </defs>
 
-  <rect width="860" height="160" fill="url(#bg2)" rx="12"/>
-
-  <!-- subtle grid -->
+  <rect width="960" height="230" fill="url(#bg2)" rx="12"/>
   <pattern id="grid2" width="30" height="30" patternUnits="userSpaceOnUse">
     <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#21262d" stroke-width="0.4"/>
   </pattern>
-  <rect width="860" height="160" fill="url(#grid2)" rx="12" opacity="0.5"/>
+  <rect width="960" height="230" fill="url(#grid2)" rx="12" opacity="0.5"/>
 
-  <!-- Step 1: Node Selector -->
-  <g filter="url(#sh2)">
-    <rect x="18" y="24" width="182" height="112" rx="10" fill="url(#step1)" stroke="#58a6ff" stroke-width="1.4"/>
-  </g>
-  <rect x="18" y="24" width="38" height="22" rx="6" fill="#58a6ff" opacity="0.2"/>
-  <text x="37" y="39" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="800">01</text>
-  <text x="109" y="65" text-anchor="middle" font-size="11" fill="#58a6ff" font-weight="700" letter-spacing="0.5">NODE SELECTOR</text>
-  <text x="109" y="84" text-anchor="middle" font-size="9" fill="#58a6ff" opacity="0.7">Llama-3.2-1B-Instruct</text>
-  <text x="109" y="100" text-anchor="middle" font-size="9" fill="#8b949e">Dynamically picks</text>
-  <text x="109" y="114" text-anchor="middle" font-size="9" fill="#8b949e">3–5 domain expert roles</text>
+  <!-- Column headers -->
+  <text x="82" y="28" text-anchor="middle" font-size="9" fill="#8b949e" letter-spacing="1" font-family="monospace">STEP</text>
+  <text x="340" y="28" text-anchor="middle" font-size="9" fill="#3fb950" letter-spacing="1" font-family="monospace">STANDARD MODE</text>
+  <text x="720" y="28" text-anchor="middle" font-size="9" fill="#f0883e" letter-spacing="1" font-family="monospace">CASE STUDY MODE</text>
+  <line x1="16" y1="34" x2="944" y2="34" stroke="#21262d" stroke-width="1"/>
 
-  <!-- Arrow 1→2 -->
-  <line x1="200" y1="80" x2="222" y2="80" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Row 0 -->
+  <rect x="16" y="42" width="132" height="36" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="82" y="64" text-anchor="middle" font-size="10" fill="#8b949e" font-weight="600">Step 0</text>
+  <rect x="164" y="42" width="352" height="36" rx="6" fill="#21262d" stroke="#30363d" stroke-width="0.8"/>
+  <text x="340" y="60" text-anchor="middle" font-size="9.5" fill="#6e7681">—</text>
+  <rect x="532" y="42" width="412" height="36" rx="6" fill="#f0883e" opacity="0.07" stroke="#f0883e" stroke-width="0.8"/>
+  <text x="738" y="60" text-anchor="middle" font-size="9.5" fill="#f0883e">Upload &amp; extract files (PDF / Image / DOCX / TXT)</text>
 
-  <!-- Step 2: Expert Analysis -->
-  <g filter="url(#sh2)">
-    <rect x="222" y="24" width="182" height="112" rx="10" fill="url(#step2)" stroke="#a371f7" stroke-width="1.4"/>
-  </g>
-  <rect x="222" y="24" width="38" height="22" rx="6" fill="#a371f7" opacity="0.2"/>
-  <text x="241" y="39" text-anchor="middle" font-size="11" fill="#a371f7" font-weight="800">02</text>
-  <text x="313" y="65" text-anchor="middle" font-size="11" fill="#d2a8ff" font-weight="700" letter-spacing="0.5">EXPERT ANALYSIS</text>
-  <text x="313" y="84" text-anchor="middle" font-size="9" fill="#a371f7" opacity="0.7">Parallel execution</text>
-  <text x="313" y="100" text-anchor="middle" font-size="9" fill="#8b949e">Each expert analyzes from</text>
-  <text x="313" y="114" text-anchor="middle" font-size="9" fill="#8b949e">their specialized lens</text>
+  <!-- Row 1 -->
+  <rect x="16" y="84" width="132" height="36" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="82" y="106" text-anchor="middle" font-size="10" fill="#8b949e" font-weight="600">Step 1</text>
+  <rect x="164" y="84" width="352" height="36" rx="6" fill="#3fb950" opacity="0.07" stroke="#3fb950" stroke-width="0.8"/>
+  <text x="340" y="102" text-anchor="middle" font-size="9.5" fill="#3fb950">Node Selector picks 3–5 experts dynamically</text>
+  <rect x="532" y="84" width="412" height="36" rx="6" fill="#e3b341" opacity="0.07" stroke="#e3b341" stroke-width="0.8"/>
+  <text x="738" y="102" text-anchor="middle" font-size="9.5" fill="#e3b341">User defines 2–6 custom expert nodes with behaviors</text>
 
-  <!-- Arrow 2→3 -->
-  <line x1="404" y1="80" x2="426" y2="80" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- Row 2 -->
+  <rect x="16" y="126" width="132" height="36" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="82" y="148" text-anchor="middle" font-size="10" fill="#8b949e" font-weight="600">Step 2</text>
+  <rect x="164" y="126" width="352" height="36" rx="6" fill="#21262d" stroke="#30363d" stroke-width="0.8"/>
+  <text x="340" y="144" text-anchor="middle" font-size="9.5" fill="#6e7681">—</text>
+  <rect x="532" y="126" width="412" height="36" rx="6" fill="#f0883e" opacity="0.07" stroke="#f0883e" stroke-width="0.8"/>
+  <text x="738" y="144" text-anchor="middle" font-size="9.5" fill="#f0883e">Context pipeline summarizes files if over token limit</text>
 
-  <!-- Step 3: Cross-Check -->
-  <g filter="url(#sh2)">
-    <rect x="426" y="24" width="182" height="112" rx="10" fill="url(#step3)" stroke="#ffa657" stroke-width="1.4"/>
-  </g>
-  <rect x="426" y="24" width="38" height="22" rx="6" fill="#ffa657" opacity="0.2"/>
-  <text x="445" y="39" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="800">03</text>
-  <text x="517" y="65" text-anchor="middle" font-size="11" fill="#ffa657" font-weight="700" letter-spacing="0.5">CROSS-CHECK</text>
-  <text x="517" y="84" text-anchor="middle" font-size="9" fill="#ffa657" opacity="0.7">Coordinator agent</text>
-  <text x="517" y="100" text-anchor="middle" font-size="9" fill="#8b949e">Surfaces contradictions</text>
-  <text x="517" y="114" text-anchor="middle" font-size="9" fill="#8b949e">&amp; agreements</text>
-
-  <!-- Arrow 3→4 -->
-  <line x1="608" y1="80" x2="630" y2="80" stroke="#30363d" stroke-width="1.5" marker-end="url(#arr)"/>
-
-  <!-- Step 4: Synthesizer -->
-  <g filter="url(#sh2)">
-    <rect x="630" y="24" width="212" height="112" rx="10" fill="url(#step4)" stroke="#f85149" stroke-width="1.4"/>
-  </g>
-  <rect x="630" y="24" width="38" height="22" rx="6" fill="#f85149" opacity="0.2"/>
-  <text x="649" y="39" text-anchor="middle" font-size="11" fill="#f85149" font-weight="800">04</text>
-  <text x="736" y="65" text-anchor="middle" font-size="11" fill="#f85149" font-weight="700" letter-spacing="0.5">SYNTHESIZER</text>
-  <text x="736" y="84" text-anchor="middle" font-size="9" fill="#f85149" opacity="0.7">Final verdict</text>
-  <text x="736" y="100" text-anchor="middle" font-size="9" fill="#8b949e">Unified answer reconciling</text>
-  <text x="736" y="114" text-anchor="middle" font-size="9" fill="#8b949e">all perspectives</text>
+  <!-- Row 3 -->
+  <rect x="16" y="168" width="132" height="36" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+  <text x="82" y="190" text-anchor="middle" font-size="10" fill="#8b949e" font-weight="600">Steps 3–5</text>
+  <rect x="164" y="168" width="780" height="36" rx="6" fill="#a371f7" opacity="0.07" stroke="#a371f7" stroke-width="0.8"/>
+  <text x="554" y="186" text-anchor="middle" font-size="9.5" fill="#a371f7">All experts analyze in parallel  →  Cross-Check finds contradictions  →  Synthesizer produces unified verdict</text>
 </svg>

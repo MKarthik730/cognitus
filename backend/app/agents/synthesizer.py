@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import logging
+
 from backend.app.core.config import settings
 from backend.app.graph.state import (
     ConfidenceLevel,
@@ -7,19 +10,31 @@ from backend.app.graph.state import (
     ExpertOutput,
     SynthesisOutput,
 )
+from backend.app.schemas.node_output import clean_json_response
 from backend.app.services.hf_service import HFService
 
-SYNTHESIZER_SYSTEM_PROMPT = (
-    "You are a chief synthesizer. You have received analyses from multiple domain experts "
-    "along with a cross-check analysis identifying contradictions and agreements. "
-    "Your task is to synthesize all perspectives into a unified, actionable conclusion.\n\n"
-    "If the evidence is evenly split or the consensus score is exactly 0.5, your verdict "
-    "should be: 'Context-dependent — the evidence is inconclusive.'\n\n"
-    "Output in this exact format:\n"
-    "VERDICT: <concise verdict>\n"
-    "REASONING: <detailed reasoning that reconciles different expert perspectives>\n"
-    "CONFIDENCE: <high|medium|low>\n"
-    "CONSENSUS_SCORE: <0.0-1.0>"
+logger = logging.getLogger(__name__)
+
+SYNTHESIZER_SYSTEM_PROMPT = """
+You are a chief synthesizer. You have received analyses from multiple domain experts
+along with a cross-check analysis identifying contradictions and agreements.
+Your task is to synthesize all perspectives into a unified, actionable conclusion.
+
+If the evidence is evenly split or the consensus score is exactly 0.5, your verdict
+should state that the evidence is inconclusive.
+
+Respond ONLY with a JSON object. No preamble, no markdown fences, no explanation outside the JSON:
+{
+    "verdict": "<concise verdict>",
+    "reasoning": "<detailed reasoning that reconciles different expert perspectives>",
+    "confidence": "high" | "medium" | "low",
+    "consensus_score": <0.0-1.0>
+}
+"""
+
+RETRY_PROMPT = (
+    "\n\nYour previous response was not valid JSON matching the required schema. "
+    "Retry now, responding ONLY with the JSON object."
 )
 
 
@@ -37,8 +52,15 @@ class SynthesizerNode:
 
         sections.append("--- EXPERT ANALYSES ---\n")
         for domain, output in experts.items():
+            position = output.get("position") or ""
+            key_findings = output.get("key_findings") or []
+            concerns = output.get("concerns") or []
+
             sections.append(
                 f"[{domain.upper()}]\n"
+                f"Position: {position}\n"
+                f"Key Findings: {'; '.join(key_findings)}\n"
+                f"Concerns: {'; '.join(concerns)}\n"
                 f"Analysis: {output['analysis']}\n"
                 f"Confidence: {output['confidence']}\n"
             )
@@ -64,43 +86,6 @@ class SynthesizerNode:
 
         return "".join(sections)
 
-    @staticmethod
-    def _parse_response(text: str) -> tuple[str, str, ConfidenceLevel, float]:
-        verdict = ""
-        reasoning = ""
-        confidence: ConfidenceLevel = "medium"
-        consensus_score = 0.5
-
-        lines = text.splitlines()
-        reasoning_lines: list[str] = []
-        in_reasoning = False
-
-        for line in lines:
-            if line.startswith("VERDICT:"):
-                verdict = line[len("VERDICT:") :].strip()
-            elif line.startswith("REASONING:"):
-                in_reasoning = True
-                rest = line[len("REASONING:") :].strip()
-                if rest:
-                    reasoning_lines.append(rest)
-            elif line.startswith("CONFIDENCE:"):
-                in_reasoning = False
-                conf = line[len("CONFIDENCE:") :].strip().lower()
-                if conf in ("high", "medium", "low"):
-                    confidence = conf  # type: ignore[assignment]
-            elif line.startswith("CONSENSUS_SCORE:"):
-                in_reasoning = False
-                try:
-                    score = float(line.split(":", 1)[1].strip())
-                    consensus_score = max(0.0, min(1.0, score))
-                except ValueError:
-                    pass
-            elif in_reasoning:
-                reasoning_lines.append(line)
-
-        reasoning = " ".join(reasoning_lines).strip()
-        return verdict, reasoning, confidence, consensus_score
-
     async def synthesize(
         self,
         situation: str,
@@ -108,18 +93,76 @@ class SynthesizerNode:
         cross_check: CrossCheckOutput,
     ) -> SynthesisOutput:
         user_prompt = self._build_user_prompt(situation, experts, cross_check)
-        response, model = await self.hf_service.generate(
-            SYNTHESIZER_SYSTEM_PROMPT,
-            user_prompt,
-            max_tokens=settings.HF_SYNTHESIS_MAX_TOKENS,
-        )
-        verdict, reasoning, confidence, consensus_score = self._parse_response(response)
+        verdict = ""
+        reasoning = ""
+        confidence: ConfidenceLevel = "medium"
+        consensus_score = 0.5
+        model_used = ""
+
+        response, model = await self._generate_synthesis(user_prompt, is_retry=False)
+
+        if response:
+            parsed = self._try_parse(response)
+            if parsed:
+                verdict = parsed.get("verdict", "")
+                reasoning = parsed.get("reasoning", "")
+                conf = parsed.get("confidence", "medium")
+                if conf in ("high", "medium", "low"):
+                    confidence = conf  # type: ignore[assignment]
+                consensus_score = max(0.0, min(1.0, parsed.get("consensus_score", 0.5)))
+                model_used = model
+            else:
+                # Retry once
+                logger.warning("Synthesizer JSON parse failed, retrying...")
+                response2, model2 = await self._generate_synthesis(
+                    user_prompt, is_retry=True
+                )
+                if response2:
+                    parsed2 = self._try_parse(response2)
+                    if parsed2:
+                        verdict = parsed2.get("verdict", "")
+                        reasoning = parsed2.get("reasoning", "")
+                        conf = parsed2.get("confidence", "medium")
+                        if conf in ("high", "medium", "low"):
+                            confidence = conf  # type: ignore[assignment]
+                        consensus_score = max(
+                            0.0, min(1.0, parsed2.get("consensus_score", 0.5))
+                        )
+                        model_used = model2
 
         return SynthesisOutput(
-            verdict=verdict or "Unable to produce a verdict.",
-            reasoning=reasoning or response,
+            verdict=verdict or response or "Unable to produce a verdict.",
+            reasoning=reasoning or response or "",
             confidence=confidence,
             consensus_score=consensus_score,
-            model_used=model,
+            model_used=model_used,
             processing_time_ms=0,
         )
+
+    def _try_parse(self, raw: str) -> dict | None:
+        """Attempt to parse a raw response as JSON."""
+        try:
+            cleaned = clean_json_response(raw)
+            return json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.debug("Failed to parse synthesis JSON: %s", e)
+            return None
+
+    async def _generate_synthesis(
+        self, user_prompt: str, is_retry: bool = False
+    ) -> tuple[str | None, str]:
+        """Generate synthesis with optional retry."""
+        system = SYNTHESIZER_SYSTEM_PROMPT
+        if is_retry:
+            system = system + RETRY_PROMPT
+
+        try:
+            response, model = await self.hf_service.generate(
+                system,
+                user_prompt,
+                max_tokens=settings.HF_SYNTHESIS_MAX_TOKENS,
+            )
+            return response, model
+        except Exception as e:
+            logger.error("Synthesis generation failed: %s", e)
+            return None, ""

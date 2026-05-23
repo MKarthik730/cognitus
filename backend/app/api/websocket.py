@@ -5,11 +5,17 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
 from backend.app.core.config import settings
 from backend.app.graph.state import PipelineStatus
+from backend.app.schemas.node_output import (
+    NodeOutput,
+    clean_json_response,
+    confidence_to_level,
+    is_hallucinated,
+)
 from backend.app.services.hf_service import HFService
 from backend.app.services.node_selector import NodeSelector
 from backend.app.graph.council_graph import CouncilGraph
@@ -20,63 +26,78 @@ router = APIRouter(tags=["websocket"])
 
 connected_clients: dict[str, list[WebSocket]] = {}
 
+# JSON schema appended to case study expert prompts
+CASE_STUDY_JSON_SCHEMA = """
+Respond ONLY in the following JSON schema. No preamble, no markdown fences, no explanation outside the JSON:
+{
+    "confidence": <integer 0-100>,
+    "position": "<string>",
+    "reasoning": "<string>",
+    "key_findings": ["<string>", ...],
+    "concerns": ["<string>", ...],
+    "revision": null
+}
+"""
+
+CASE_STUDY_RETRY_PROMPT = (
+    "\n\nYour previous response was not valid JSON matching the required schema. "
+    "Retry now, responding ONLY with the JSON object. "
+    "No preamble, no markdown fences, no explanation."
+)
+
 
 async def get_redis() -> Redis:
     return Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
 
-def _parse_case_response(text: str) -> dict[str, str]:
-    result = {
-        "confidence": "medium",
-        "reasoning": "",
-        "keyFindings": "",
-        "concerns": "",
-        "position": "",
-    }
-    lines = text.split("\n")
-    current_key: str | None = None
-    current_value: list[str] = []
+def _parse_json_response(raw: str) -> dict[str, Any] | None:
+    """Parse a raw LLM response as JSON and return validated fields.
 
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("CONFIDENCE:"):
-            if current_key:
-                result[current_key] = "\n".join(current_value).strip()
-            val = stripped[len("CONFIDENCE:") :].strip().lower()
-            if val in ("low", "medium", "high"):
-                result["confidence"] = val
-            current_key = None
-            current_value = []
-        elif stripped.startswith("REASONING:"):
-            if current_key:
-                result[current_key] = "\n".join(current_value).strip()
-            current_key = "reasoning"
-            rest = stripped[len("REASONING:") :].strip()
-            current_value = [rest] if rest else []
-        elif stripped.startswith("KEY FINDINGS:"):
-            if current_key:
-                result[current_key] = "\n".join(current_value).strip()
-            current_key = "keyFindings"
-            rest = stripped[len("KEY FINDINGS:") :].strip()
-            current_value = [rest] if rest else []
-        elif stripped.startswith("CONCERNS:"):
-            if current_key:
-                result[current_key] = "\n".join(current_value).strip()
-            current_key = "concerns"
-            rest = stripped[len("CONCERNS:") :].strip()
-            current_value = [rest] if rest else []
-        elif stripped.startswith("POSITION:"):
-            if current_key:
-                result[current_key] = "\n".join(current_value).strip()
-            current_key = "position"
-            rest = stripped[len("POSITION:") :].strip()
-            current_value = [rest] if rest else []
-        elif current_key:
-            current_value.append(line)
+    Uses the Pydantic NodeOutput model for validation, then converts
+    to a dict for backward compatibility with the case study data format.
+    """
+    try:
+        cleaned = clean_json_response(raw)
+        data = json.loads(cleaned)
+        # Validate with Pydantic model
+        validated = NodeOutput(**data)
+        # Convert to dict with string confidence level for backward compat
+        return {
+            "confidence": validated.confidence,
+            "confidence_level": confidence_to_level(validated.confidence),
+            "position": validated.position,
+            "reasoning": validated.reasoning,
+            "key_findings": validated.key_findings,
+            "concerns": validated.concerns,
+        }
+    except (json.JSONDecodeError, ValueError, TypeError) as e:
+        logger.warning("Failed to parse case study JSON response: %s", e)
+        return None
 
-    if current_key:
-        result[current_key] = "\n".join(current_value).strip()
-    return result
+
+async def _generate_with_retry(
+    hf_service: HFService,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+) -> tuple[dict[str, Any] | None, str]:
+    """Generate an LLM response and parse as JSON, with one retry on failure."""
+    response, model = await hf_service.generate(system_prompt, user_prompt, max_tokens=max_tokens)
+
+    parsed = _parse_json_response(response)
+    if parsed is not None:
+        return parsed, model
+
+    # Retry once with explicit instruction
+    logger.warning("JSON parse failed on first attempt, retrying...")
+    retry_system = system_prompt + CASE_STUDY_RETRY_PROMPT
+    response2, model2 = await hf_service.generate(retry_system, user_prompt, max_tokens=max_tokens)
+    parsed2 = _parse_json_response(response2)
+    if parsed2 is not None:
+        return parsed2, model2
+
+    logger.error("JSON parse failed after retry")
+    return None, model
 
 
 async def _handle_case_study(
@@ -111,6 +132,7 @@ async def _handle_case_study(
         {"type": "case_node_start", "node": "experts", "status": "expert_processing"}
     )
 
+    # Run all expert nodes in parallel
     expert_tasks: dict[str, Any] = {}
     for node in nodes:
         name = node["name"]
@@ -125,19 +147,17 @@ async def _handle_case_study(
             f"2. Do not invent facts not present in the context.\n"
             f"3. If information is insufficient, state that clearly.\n"
             f"4. Be specific and reference details from the case.\n\n"
-            f"Return in EXACTLY this format:\n"
-            f"CONFIDENCE: [low|medium|high]\n"
-            f"REASONING: [...]\n"
-            f"KEY FINDINGS: [...]\n"
-            f"CONCERNS: [...]\n"
-            f"POSITION: [...]\n"
+            f"{CASE_STUDY_JSON_SCHEMA}\n"
         )
-        expert_tasks[name] = hf_service.generate(
-            system_prompt, user_prompt, max_tokens=settings.HF_EXPERT_MAX_TOKENS
+        expert_tasks[name] = _generate_with_retry(
+            hf_service,
+            system_prompt,
+            user_prompt,
+            max_tokens=settings.HF_EXPERT_MAX_TOKENS,
         )
 
     raw_results = await asyncio.gather(*expert_tasks.values(), return_exceptions=True)
-    experts: dict[str, dict[str, str]] = {}
+    experts: dict[str, dict[str, Any]] = {}
 
     for node, result in zip(nodes, raw_results):
         name = node["name"]
@@ -146,44 +166,67 @@ async def _handle_case_study(
                 {"type": "expert_error", "domain": name, "error": str(result)}
             )
         else:
-            response_text, model_used = result
-            parsed = _parse_case_response(response_text)
-            parsed["model_used"] = model_used
-            experts[name] = parsed
+            parsed_data, model_used = result
+            if parsed_data is None:
+                await websocket.send_json(
+                    {
+                        "type": "expert_error",
+                        "domain": name,
+                        "error": "Failed to produce valid structured output",
+                    }
+                )
+                continue
+
+            expert_entry = {
+                "confidence": parsed_data["confidence_level"],
+                "position": parsed_data.get("position", ""),
+                "keyFindings": parsed_data.get("key_findings", []),
+                "concerns": parsed_data.get("concerns", []),
+                "reasoning": parsed_data.get("reasoning", ""),
+                "model_used": model_used,
+            }
+            experts[name] = expert_entry
             await websocket.send_json(
                 {
                     "type": "case_expert_complete",
                     "domain": name,
-                    "data": parsed,
+                    "data": expert_entry,
                 }
             )
 
     await websocket.send_json({"type": "case_cross_check", "status": "cross_checking"})
 
+    # Compute consensus from stored expert confidence levels
     confidence_map = {"low": 0.2, "medium": 0.5, "high": 0.8}
-    scores = [
-        confidence_map.get(e.get("confidence", "medium"), 0.5) for e in experts.values()
+    consensus_scores = [
+        confidence_map.get(e.get("confidence", "medium"), 0.5)
+        for e in experts.values()
     ]
-    consensus = round(sum(scores) / len(scores), 2) if scores else 0.5
+    consensus = round(sum(consensus_scores) / len(consensus_scores), 2) if consensus_scores else 0.5
 
+    # Build expert summaries for cross-check prompt
     expert_summaries = "\n\n".join(
         [
             f"=== {name} (Confidence: {data.get('confidence', 'medium')}) ===\n"
             f"Position: {data.get('position', '')}\n"
-            f"Key Findings: {data.get('keyFindings', '')}\n"
-            f"Concerns: {data.get('concerns', '')}"
+            f"Key Findings: {', '.join(data.get('keyFindings', []))}\n"
+            f"Concerns: {', '.join(data.get('concerns', []))}"
             for name, data in experts.items()
         ]
     )
+
+    # Cross-check
     try:
         cross_response, _ = await hf_service.generate(
-            "You are an impartial cross-check analyst. Compare the expert analyses below and identify areas of agreement, disagreement, and contradictions.",
+            "You are an impartial cross-check analyst. Compare the expert analyses below and identify areas of agreement, disagreement, and contradictions. "
+            "Respond with a JSON object: {\"analysis\": \"<string>\", \"consensus_score\": <0.0-1.0>}",
             f"Expert Analyses:\n\n{expert_summaries}\n\nProvide a cross-check analysis.",
             max_tokens=1024,
         )
+        cross_parsed = _parse_json_response(cross_response)
         cross_check_data = {
-            "analysis": cross_response,
-            "consensus_score": consensus,
+            "analysis": cross_parsed.get("analysis", cross_response) if cross_parsed else cross_response,
+            "consensus_score": cross_parsed.get("consensus_score", consensus) if cross_parsed else consensus,
         }
     except Exception as e:
         logger.warning("Cross-check generation failed: %s", e)
@@ -194,17 +237,29 @@ async def _handle_case_study(
 
     await websocket.send_json({"type": "case_cross_check", "data": cross_check_data})
 
+    # Synthesis
     await websocket.send_json({"type": "case_synthesize", "status": "synthesizing"})
 
     try:
         synth_response, _ = await hf_service.generate(
-            "You are a neutral synthesizer. Combine all expert analyses into a coherent final assessment.",
+            "You are a neutral synthesizer. Combine all expert analyses into a coherent final assessment. "
+            "Respond with a JSON object: {\"verdict\": \"<string>\", \"reasoning\": \"<string>\", \"confidence\": \"<high|medium|low>\", \"consensus_score\": <0.0-1.0>, \"critical_findings\": [\"<string>\"], \"recommendations\": [\"<string>\"], \"unresolved_disagreements\": [\"<string>\"]}",
             f"Guiding Question: {guiding_question or 'N/A'}\n\nExpert Analyses:\n{expert_summaries}\n\nCross-check:\n{cross_check_data.get('analysis', '')}\n\nProvide a synthesis.",
             max_tokens=settings.HF_SYNTHESIS_MAX_TOKENS,
         )
-        synthesis_data = {
-            "verdict": synth_response,
-        }
+        synth_parsed = _parse_json_response(synth_response)
+        if synth_parsed:
+            synthesis_data = {
+                "verdict": synth_parsed.get("verdict", synth_response),
+                "reasoning": synth_parsed.get("reasoning", ""),
+                "confidence": synth_parsed.get("confidence", "medium"),
+                "consensus_score": synth_parsed.get("consensus_score", consensus),
+                "criticalFindings": synth_parsed.get("critical_findings", []),
+                "recommendations": synth_parsed.get("recommendations", []),
+                "unresolvedDisagreements": synth_parsed.get("unresolved_disagreements", []),
+            }
+        else:
+            synthesis_data = {"verdict": synth_response}
     except Exception as e:
         logger.warning("Synthesis generation failed: %s", e)
         synthesis_data = {"verdict": "Synthesis could not be generated."}
@@ -281,14 +336,20 @@ async def _stream_graph_events(
         else:
             output = result
             experts[domain] = output
+            # Send structured data that frontend can use
             await websocket.send_json(
                 {
                     "type": "expert_complete",
                     "domain": domain,
                     "data": {
-                        "analysis": output["analysis"],
-                        "confidence": output["confidence"],
-                        "model_used": output["model_used"],
+                        "analysis": output.get("analysis", ""),
+                        "confidence": output.get("confidence", "medium"),
+                        "position": output.get("position", ""),
+                        "reasoning": output.get("reasoning", ""),
+                        "key_findings": output.get("key_findings", []),
+                        "concerns": output.get("concerns", []),
+                        "confidence_score": output.get("confidence_score"),
+                        "model_used": output.get("model_used", ""),
                     },
                 }
             )
@@ -333,8 +394,12 @@ async def _stream_graph_events(
                 "experts": [
                     {
                         "domain": d,
-                        "analysis": e["analysis"],
-                        "confidence": e["confidence"],
+                        "analysis": e.get("analysis", ""),
+                        "confidence": e.get("confidence", "medium"),
+                        "position": e.get("position"),
+                        "reasoning": e.get("reasoning"),
+                        "key_findings": e.get("key_findings"),
+                        "concerns": e.get("concerns"),
                     }
                     for d, e in experts.items()
                 ],

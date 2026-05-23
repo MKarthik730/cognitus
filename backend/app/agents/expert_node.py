@@ -1,8 +1,19 @@
 from __future__ import annotations
 
+import json
+import logging
+
 from backend.app.core.config import settings
 from backend.app.graph.state import ExpertOutput
+from backend.app.schemas.node_output import (
+    NodeOutput,
+    clean_json_response,
+    confidence_to_level,
+    is_hallucinated,
+)
 from backend.app.services.hf_service import HFService
+
+logger = logging.getLogger(__name__)
 
 DOMAIN_PROMPTS: dict[str, str] = {
     "legal": (
@@ -67,27 +78,142 @@ DOMAIN_PROMPTS: dict[str, str] = {
     ),
 }
 
+JSON_SCHEMA_SUFFIX = """
+Respond ONLY in the following JSON schema. No preamble, no markdown fences, no explanation outside the JSON:
+{
+    "confidence": <integer 0-100>,
+    "position": "<string>",
+    "reasoning": "<string>",
+    "key_findings": ["<string>", ...],
+    "concerns": ["<string>", ...],
+    "revision": null
+}
+"""
+
+RETRY_PROMPT = (
+    "\n\nYour previous response was not valid JSON matching the required schema. "
+    "Retry now, responding ONLY with the JSON object. "
+    "No preamble, no markdown fences, no explanation."
+)
+
 
 class ExpertNode:
     def __init__(
         self, domain: str, hf_service: HFService, behavior: str | None = None
     ) -> None:
         self.domain = domain
-        self.system_prompt = behavior or DOMAIN_PROMPTS.get(
+        base_prompt = behavior or DOMAIN_PROMPTS.get(
             domain, DOMAIN_PROMPTS["business"]
         )
+        self.system_prompt = base_prompt + JSON_SCHEMA_SUFFIX
         self.hf_service = hf_service
 
     async def analyze(self, situation: str) -> ExpertOutput:
+        node_output, model = await self._generate_node_output(situation)
+        return self._to_expert_output(node_output, model)
+
+    async def _generate_node_output(
+        self, situation: str, is_retry: bool = False
+    ) -> tuple[NodeOutput | None, str]:
+        """Generate and validate structured node output from the LLM.
+
+        Attempts the generation once, then retries on validation or hallucination failure.
+        Returns (NodeOutput, model) on success, or (None, model) on failure.
+        """
+        system = self.system_prompt
+        if is_retry:
+            system = self.system_prompt + RETRY_PROMPT
+
         response, model = await self.hf_service.generate(
-            self.system_prompt,
+            system,
             situation,
             max_tokens=settings.HF_EXPERT_MAX_TOKENS,
         )
+
+        # Attempt to parse and validate
+        parsed = self._try_parse(response)
+        if parsed is None:
+            if not is_retry:
+                logger.warning(
+                    "Expert %s: JSON parse failed, retrying once. Raw: %.200s",
+                    self.domain,
+                    response,
+                )
+                return await self._generate_node_output(situation, is_retry=True)
+            logger.error(
+                "Expert %s: JSON parse failed after retry. Marking as error.",
+                self.domain,
+            )
+            return None, model
+
+        # Check for hallucination
+        if is_hallucinated(parsed):
+            if not is_retry:
+                logger.warning(
+                    "Expert %s: Hallucination detected, retrying once.",
+                    self.domain,
+                )
+                return await self._generate_node_output(situation, is_retry=True)
+            logger.error(
+                "Expert %s: Hallucination detected after retry. Marking as error.",
+                self.domain,
+            )
+            return None, model
+
+        return parsed, model
+
+    def _try_parse(self, raw: str) -> NodeOutput | None:
+        """Try to parse a raw string into a NodeOutput.
+
+        Returns None if parsing or validation fails.
+        """
+        try:
+            cleaned = clean_json_response(raw)
+            data = json.loads(cleaned)
+            return NodeOutput(**data)
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.debug("Failed to parse expert response: %s", e)
+            return None
+
+    def _to_expert_output(
+        self, node_output: NodeOutput | None, model: str
+    ) -> ExpertOutput:
+        """Convert a NodeOutput (or None for errors) to an ExpertOutput TypedDict.
+
+        The `analysis` field is set to a human-readable formatted string for
+        backward compatibility with the frontend renderer.
+        """
+        if node_output is None:
+            return ExpertOutput(
+                domain=self.domain,
+                analysis="",
+                confidence="low",
+                model_used=model,
+                processing_time_ms=0,
+            )
+
+        # Build a readable summary from structured fields for backward compat
+        readable_analysis = (
+            f"Position: {node_output.position}\n\n"
+            f"Reasoning: {node_output.reasoning}\n\n"
+            f"Key Findings:\n"
+        )
+        for i, finding in enumerate(node_output.key_findings, 1):
+            readable_analysis += f"{i}. {finding}\n"
+        if node_output.concerns:
+            readable_analysis += "\nConcerns:\n"
+            for concern in node_output.concerns:
+                readable_analysis += f"- {concern}\n"
+
         return ExpertOutput(
             domain=self.domain,
-            analysis=response,
-            confidence="medium",
+            analysis=readable_analysis,
+            confidence=confidence_to_level(node_output.confidence),
+            confidence_score=node_output.confidence,
+            position=node_output.position,
+            reasoning=node_output.reasoning,
+            key_findings=node_output.key_findings,
+            concerns=node_output.concerns,
             model_used=model,
             processing_time_ms=0,
         )

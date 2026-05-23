@@ -2,28 +2,44 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import Any
 
 from backend.app.core.config import settings
+from backend.app.schemas.node_output import clean_json_response
 from backend.app.services.hf_service import HFService
 
 logger = logging.getLogger(__name__)
 
-NODE_SELECTOR_SYSTEM_PROMPT = (
-    "List 3 to 5 specific expert roles that would best analyze this question. "
-    "Output one role per line, with a dash at the start. "
-    "Example:\n"
-    "- Cardiologist\n"
-    "- Intensivist\n"
-    "- Pharmacologist\n\n"
-    "Choose roles that match the question domain precisely.\n"
-    "Never use generic names like Medical, Business, Ethics.\n"
-    "For clinical: Cardiologist, Intensivist, Pharmacologist, Nephrologist\n"
-    "For legal: Legal Analyst, Judge, Defense Counsel, Prosecutor\n"
-    "For engineering: Security Engineer, DevOps Lead, QA Engineer\n"
-    "For business: CFO, Market Analyst, Investor\n"
-    "For criminal: Evidence Analyst, Forensic Pathologist, Psychologist"
+NODE_SELECTOR_SYSTEM_PROMPT = """
+List 3 to 5 specific expert roles that would best analyze this question.
+Choose roles that match the question domain precisely.
+
+For clinical: Cardiologist, Intensivist, Pharmacologist, Nephrologist
+For legal: Legal Analyst, Judge, Defense Counsel, Prosecutor
+For engineering: Security Engineer, DevOps Lead, QA Engineer
+For business: CFO, Market Analyst, Investor
+For criminal: Evidence Analyst, Forensic Pathologist, Psychologist
+
+Respond ONLY with a JSON object. No preamble, no markdown fences, no explanation outside the JSON:
+{
+    "nodes": [
+        {
+            "name": "<role name, e.g. Cardiologist>",
+            "role": "<one-line description of the role>",
+            "behavior": "<detailed system prompt describing how this role should reason>"
+        }
+    ]
+}
+
+Each node entry must have:
+- name: The specific role title (e.g. "Cardiologist", not "Medical")
+- role: A concise one-line description of what this expert does
+- behavior: A detailed system prompt (2-3 sentences) describing how this expert should analyze, what to focus on, and what style to use
+"""
+
+RETRY_PROMPT = (
+    "\n\nYour previous response was not valid JSON matching the required schema. "
+    "Retry now, responding ONLY with the JSON object."
 )
 
 DEFAULT_FALLBACK_NODES = [
@@ -56,9 +72,6 @@ DEFAULT_FALLBACK_NODES = [
     },
 ]
 
-_ROLE_LINE_RE = re.compile(r"^[-*\d]+\.?\s+(.+)$", re.MULTILINE)
-_BOLD_ROLE_RE = re.compile(r"\*\*([A-Za-z]+(?:\s+[A-Za-z]+)*?)\*\*")
-
 
 def _auto_role(name: str) -> str:
     return f"Provides expert {name.lower()} analysis of the situation"
@@ -87,13 +100,24 @@ class NodeSelector:
                 max_tokens=settings.HF_NODE_SELECTOR_MAX_TOKENS,
             )
             logger.debug("Raw node selector response: %.200s", response)
-            nodes = self._parse_response(response, situation)
+
+            nodes = self._parse_json_response(response, situation)
             if nodes:
                 return nodes
-            logger.warning(
-                "Node selection parse returned empty. Response: %.300s",
-                response,
+
+            logger.warning("Node selection JSON parse returned empty, retrying...")
+            # Retry once
+            response2, _model2 = await self.hf_service.generate(
+                NODE_SELECTOR_SYSTEM_PROMPT + RETRY_PROMPT,
+                situation,
+                max_tokens=settings.HF_NODE_SELECTOR_MAX_TOKENS,
             )
+            if response2:
+                nodes = self._parse_json_response(response2, situation)
+                if nodes:
+                    return nodes
+
+            logger.warning("Node selection JSON parse empty after retry.")
         except Exception as e:
             logger.error("Node selection failed: %s", e)
             if response:
@@ -101,127 +125,51 @@ class NodeSelector:
 
         return self._fallback(situation)
 
-    def _parse_response(self, text: str, situation: str) -> list[dict[str, str]] | None:
-        names = self._extract_names(text)
-        seen: set[str] = set()
-        nodes: list[dict[str, str]] = []
-        for name in names:
-            if name.lower() in seen or not name:
-                continue
-            seen.add(name.lower())
-            nodes.append(
-                {
-                    "name": name,
-                    "role": _auto_role(name),
-                    "behavior": _auto_behavior(name, situation),
-                }
-            )
-        if len(nodes) >= 3:
-            return nodes[:5]
-        return None
+    def _parse_json_response(
+        self, text: str | None, situation: str
+    ) -> list[dict[str, str]] | None:
+        """Parse JSON node selector response into node list."""
+        if not text:
+            return None
 
-    def _extract_names(self, text: str) -> list[str]:
-        candidates = []
+        try:
+            cleaned = clean_json_response(text)
+            data = json.loads(cleaned)
+            raw_nodes = data.get("nodes", [])
 
-        dash_matches = _ROLE_LINE_RE.findall(text)
-        for m in dash_matches:
-            raw = m.strip()
-            short = raw.split(":")[0].split(".")[0].split(",")[0].strip()
-            if (
-                short
-                and len(short) <= 40
-                and not short.startswith("NODE")
-                and not short.startswith("System")
-            ):
-                candidates.append(short)
+            if not raw_nodes or not isinstance(raw_nodes, list):
+                return None
 
-        if len(candidates) < 3:
-            bold_matches = _BOLD_ROLE_RE.findall(text)
-            for m in bold_matches:
-                short = m.strip().rstrip(".:,")
-                if 1 <= len(short.split()) <= 4 and len(short) <= 40:
-                    candidates.append(short)
+            nodes: list[dict[str, str]] = []
+            seen: set[str] = set()
 
-        if len(candidates) < 3:
-            words = text.split()
-            for i, w in enumerate(words):
-                w_clean = w.strip("*#-:.,;!?")
-                if (
-                    w_clean
-                    and w_clean[0].isupper()
-                    and w_clean.isalpha()
-                    and len(w_clean) > 3
-                ):
-                    if i + 1 < len(words):
-                        next_w = words[i + 1].strip("*#-:.,;!?")
-                        if next_w and next_w[0].isupper() and next_w.isalpha():
-                            candidates.append(f"{w_clean} {next_w}")
-                    candidates.append(w_clean)
+            for item in raw_nodes:
+                name = item.get("name", "").strip()
+                if not name or name.lower() in seen:
+                    continue
+                seen.add(name.lower())
 
-        _SKIP = {
-            "node",
-            "detailed",
-            "system",
-            "prompt",
-            "clinical",
-            "expert",
-            "given",
-            "considering",
-            "based",
-            "role",
-            "name",
-            "behavior",
-            "example",
-            "output",
-            "format",
-            "rules",
-            "select",
-            "list",
-            "choose",
-            "never",
-            "always",
-            "each",
-            "minimum",
-            "maximum",
-            "the",
-            "this",
-            "that",
-            "with",
-            "from",
-            "would",
-            "have",
-            "they",
-            "what",
-            "analysis",
-            "would",
-            "should",
-            "their",
-            "them",
-            "these",
-        }
+                role = item.get("role", "").strip() or _auto_role(name)
+                behavior = item.get("behavior", "").strip() or _auto_behavior(
+                    name, situation
+                )
 
-        filtered = []
-        for n in candidates:
-            cleaned = n.strip().strip("*#-:.,;!?").strip()
-            words = cleaned.lower().split()
-            if (
-                1 <= len(words) <= 4
-                and len(cleaned) <= 40
-                and cleaned
-                and not any(w in _SKIP for w in words)
-                and cleaned[0].isupper()
-            ):
-                filtered.append(cleaned)
+                nodes.append(
+                    {
+                        "name": name,
+                        "role": role,
+                        "behavior": behavior,
+                    }
+                )
 
-        seen: set[str] = set()
-        unique: list[str] = []
-        for n in filtered:
-            key = n.lower().rstrip("s")
-            if key not in seen:
-                seen.add(key)
-                unique.append(n)
+            if len(nodes) >= 2:
+                return nodes[:5]
 
-        return unique
+            return None
+
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.debug("Failed to parse node selector JSON: %s", e)
+            return None
 
     def _fallback(self, situation: str) -> list[dict[str, str]]:
         logger.info("Using fallback nodes for situation: %.60s", situation)
