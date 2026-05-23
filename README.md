@@ -194,9 +194,9 @@ All nodes run in parallel. Each receives:
 - The **case context**
 - The **guiding question** (optional)
 
-Each response is parsed for: `CONFIDENCE`, `REASONING`, `KEY FINDINGS`, `CONCERNS`, `POSITION`
+Each response is parsed as **structured JSON** matching a Pydantic `NodeOutput` schema (`confidence`, `position`, `reasoning`, `key_findings`, `concerns`). Responses with markdown fences are auto-cleaned, validated, and hallucination-checked before acceptance.
 
-On parse failure, the node is marked as error and excluded from synthesis.
+On JSON parse failure, the node is re-prompted once. If both attempts fail, the node is marked as error and excluded from synthesis.
 
 ### Output
 
@@ -220,7 +220,7 @@ On parse failure, the node is marked as error and excluded from synthesis.
 
 ## Standard Mode — Dynamic Node Selection
 
-In Standard mode, the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and selects 3–5 relevant expert roles on the fly. Responses are parsed via a 3-layer regex extraction pipeline. On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
+In Standard mode, the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and selects 3–5 relevant expert roles on the fly. Responses are parsed as **structured JSON** (Pydantic `NodeOutput` schema). On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
 
 Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 
@@ -276,7 +276,9 @@ cognitus/
 │   │   │   ├── cache.py
 │   │   │   └── queue_worker.py
 │   │   ├── models/              # SQLAlchemy ORM models (7 tables)
-│   │   └── schemas/             # Pydantic request/response schemas
+│   │   └── schemas/             # Pydantic request/response schemas (NodeOutput, etc.)
+│   │   └── node_output.py
+│   └── __init__.py
 │   ├── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
@@ -306,7 +308,7 @@ cognitus/
 Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
 
 1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
-2. Response is parsed via a 3-layer regex extraction pipeline (dash lines → bold text → capitalized words)
+2. Response is parsed as structured JSON
 3. Each selected node gets an auto-generated role description and behavior prompt
 4. Nodes appear in the left panel with a staggered fade-in animation
 5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
