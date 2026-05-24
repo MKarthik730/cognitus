@@ -118,12 +118,87 @@ class NodeSelector:
                     return nodes
 
             logger.warning("Node selection JSON parse empty after retry.")
+
+            # Before giving up completely, try to extract domain names from raw text
+            if response:
+                extracted = self._extract_nodes_from_text(response, situation)
+                if extracted:
+                    logger.info("Recovered nodes via text extraction fallback")
+                    return extracted
+            if response2:
+                extracted = self._extract_nodes_from_text(response2, situation)
+                if extracted:
+                    logger.info("Recovered nodes via text extraction fallback (retry)")
+                    return extracted
         except Exception as e:
             logger.error("Node selection failed: %s", e)
             if response:
                 logger.debug("Raw response on failure: %.300s", response)
 
         return self._fallback(situation)
+
+    def _extract_nodes_from_text(
+        self, text: str, situation: str
+    ) -> list[dict[str, str]] | None:
+        """Fallback: extract domain names from raw text when JSON parsing fails.
+
+        Uses simple heuristics to pull out role names (capitalized words or
+        phrases that match known domain patterns) from the LLM output.
+        """
+        import re
+
+        # Known domain role patterns to look for
+        KNOWN_ROLES = [
+            "Cardiologist", "Intensivist", "Pharmacologist", "Nephrologist",
+            "Legal Analyst", "Judge", "Defense Counsel", "Prosecutor",
+            "Security Engineer", "DevOps Lead", "QA Engineer", "Network Engineer",
+            "CFO", "Market Analyst", "Investor", "Financial Analyst",
+            "Evidence Analyst", "Forensic Pathologist", "Psychologist",
+            "Data Scientist", "Machine Learning Engineer", "Product Manager",
+            "Ethicist", "Sociologist", "Policy Advisor", "Statistician",
+            "Epidemiologist", "Public Health Expert", "Logistics Coordinator",
+            "Supply Chain Manager", "HR Specialist", "Operations Lead",
+        ]
+
+        found: list[str] = []
+        lower_text = text.lower()
+
+        for role in KNOWN_ROLES:
+            if role.lower() in lower_text:
+                found.append(role)
+
+        # Also try to find bullet-pointed or numbered role names
+        # Look for lines that start with - or * or digit. followed by a capitalized name
+        lines = text.split("\n")
+        for line in lines:
+            stripped = line.strip()
+            # Match lines like "- Cardiologist", "1. Cardiologist", "* Cardiologist"
+            m = re.match(r"^[\s*\-\d\.]+\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)", stripped)
+            if m:
+                name = m.group(1).strip()
+                if name and not any(name.lower() == f.lower() for f in found):
+                    # Avoid catching generic words
+                    if len(name) > 2 and name.lower() not in ("the", "this", "that", "with", "from", "each"):
+                        found.append(name)
+
+        if len(found) >= 2:
+            nodes: list[dict[str, str]] = []
+            seen: set[str] = set()
+            for name in found[:5]:
+                clean_name = name.strip().rstrip(".:,")
+                if clean_name.lower() in seen:
+                    continue
+                seen.add(clean_name.lower())
+                nodes.append({
+                    "name": clean_name,
+                    "role": _auto_role(clean_name),
+                    "behavior": _auto_behavior(clean_name, situation),
+                })
+            if len(nodes) >= 2:
+                logger.info("Fallback text extraction yielded %d nodes from raw LLM output", len(nodes))
+                return nodes
+
+        return None
 
     def _parse_json_response(
         self, text: str | None, situation: str

@@ -100,18 +100,24 @@ class NodeSelectorResult(BaseModel):
 
 
 # Hallucination detection patterns
-PLACEHOLDER_PATTERNS: list[str] = [
-    "string",
-    "example",
-    "lorem",
-    "n/a",
-    "not available",
-    "not applicable",
-    "to be determined",
-    "tbd",
-    "...",
-    "insert",
-    "placeholder",
+# Patterns use word-boundary regex matching to avoid false positives.
+# We intentionally keep patterns conservative — better a few missed placeholders
+# than false-positive retries that waste tokens and frustrate users.
+PLACEHOLDER_PATTERNS: list[tuple[str, str]] = [
+    # (pattern, reason) — each pattern is checked with word-boundary matching
+    (r"\bplaceholder\b", "placeholder"),
+    (r"\blorem ipsum\b", "lorem ipsum"),
+    (r"\bn/a\b", "n/a"),
+    (r"\bnot available\b", "not available"),
+    (r"\bnot applicable\b", "not applicable"),
+    (r"\bto be determined\b", "to be determined"),
+    (r"\btbd\b", "tbd"),
+    (r"\u2026|\\ldots\b", "ellipsis"),  # ellipsis placeholder
+    (r"\[\s*\.{3,}\s*\]", "bracket ellipsis"),  # [...] as placeholder
+    # "insert" and "example" are intentionally excluded because they're too common
+    # in legitimate text (e.g., "insert a new record", "for example").
+    # "string" is excluded because it's a common engineering/data term
+    # (e.g., "a string of characters", "the function returns a string").
 ]
 
 
@@ -119,18 +125,20 @@ def is_hallucinated(output: NodeOutput) -> bool:
     """Detect if a node output contains hallucinated or placeholder content.
 
     Checks for:
-    1. Placeholder patterns in the text
+    1. Placeholder patterns in the text (using word-boundary regex matching)
     2. Minimum reasoning length requirement
     """
+    import re
+
     all_text = (
         f"{output.position} {output.reasoning} {' '.join(output.key_findings)}"
     ).lower()
 
-    for pattern in PLACEHOLDER_PATTERNS:
-        if pattern in all_text:
+    for pattern, reason in PLACEHOLDER_PATTERNS:
+        if re.search(pattern, all_text):
             logger.warning(
-                "Hallucination detected: placeholder pattern '%s' found in output",
-                pattern,
+                "Hallucination detected: placeholder pattern '%s' found in output (reason: %s)",
+                pattern, reason,
             )
             return True
 
@@ -148,7 +156,10 @@ def clean_json_response(raw: str) -> str:
     """Clean a raw LLM response to extract valid JSON.
 
     Strips markdown code fences, leading/trailing whitespace,
-    and any text before the first '{' or after the last '}'.
+    and any text before the first '{' or '[' and after the last '}' or ']'.
+
+    Handles both object-wrapped ({"...": ...}) and array-wrapped
+    ([{...}]) responses.
     """
     text = raw.strip()
 
@@ -172,12 +183,27 @@ def clean_json_response(raw: str) -> str:
 
         text = "\n".join(lines[fence_start:fence_end]).strip()
 
-    # Find the first { and last }
+    # Try to find the outermost JSON structure: either {...} or [...]
+    # If the response wraps in an array like [{...}], we extract the object
     first_brace = text.find("{")
-    last_brace = text.rfind("}")
+    first_bracket = text.find("[")
 
-    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-        text = text[first_brace : last_brace + 1]
+    if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+        # Object-wrapped: find the first '{' and last '}'
+        last_brace = text.rfind("}")
+        if last_brace > first_brace:
+            text = text[first_brace : last_brace + 1]
+    elif first_bracket != -1:
+        # Array-wrapped: find the first '[' and last ']'
+        last_bracket = text.rfind("]")
+        if last_bracket > first_bracket:
+            text = text[first_bracket : last_bracket + 1]
+            # If the array contains a single object, unwrap it
+            inner = text.strip()
+            if inner.startswith("[") and inner.endswith("]"):
+                inner_content = inner[1:-1].strip()
+                if inner_content.startswith("{") and inner_content.endswith("}"):
+                    text = inner_content
 
     return text.strip()
 
