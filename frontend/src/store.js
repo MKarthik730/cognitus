@@ -18,6 +18,11 @@ let state = {
   consensusScore: 0.5,
   synthesis: null,
 
+  // Connection state
+  connectionStatus: 'disconnected',
+  reconnectAttempts: 0,
+  isReconnecting: false,
+
   caseStudy: {
     files: [],
     nodes: [],
@@ -78,6 +83,19 @@ export function resetState() {
 export function handleWsEvent(event) {
   const s = { ...getState() };
   switch (event.type) {
+    case 'connection_change':
+      s.connectionStatus = event.status || 'disconnected';
+      s.reconnectAttempts = event.reconnectAttempts || 0;
+      s.isReconnecting = event.reconnecting || false;
+      break;
+
+    case 'connection_error':
+      s.connectionStatus = 'disconnected';
+      s.isReconnecting = false;
+      s.error = event.message || 'Connection lost';
+      s.status = 'failed';
+      break;
+
     case 'node_selection_start':
       s.nodesLoading = true;
       s.dynamicNodes = [];

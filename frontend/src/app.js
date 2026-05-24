@@ -1,5 +1,5 @@
 import { getState, setState, subscribe, handleWsEvent } from './store.js';
-import { connect, connectCaseStudy, disconnect, onEvent } from './api.js';
+import { connect, connectCaseStudy, disconnect, onEvent, onConnectionChange } from './api.js';
 import { renderMarkdown, isTruncated, getNodeColor, getDynamicNodeColor, getNodeRole, getConfidenceClass, resolveColor, PRESET_TEMPLATES, NODE_COLORS_PRESET, truncateFilename, getFileTypeIcon, getFileTypeBadgeClass } from './utils.js';
 import { initCanvas, startAnimation, zoomIn, zoomOut, fitView } from './canvas.js';
 
@@ -11,6 +11,9 @@ export function init() {
   startAnimation();
 
   onEvent(handleWsEvent);
+  onConnectionChange((connectionInfo) => {
+    handleWsEvent({ type: 'connection_change', ...connectionInfo });
+  });
 
   document.getElementById('btn-analyze').addEventListener('click', () => {
     const s = getState();
@@ -44,6 +47,36 @@ export function init() {
   subscribe('status', updateModeBadge);
   subscribe('activeNode', updateModeBadge);
   subscribe('nodesLoading', updateModeBadge);
+  subscribe('connectionStatus', (status) => {
+    const indicator = document.getElementById('reconnect-indicator');
+    const text = document.getElementById('reconnect-text');
+    if (!indicator || !text) return;
+    const s = getState();
+    if (status === 'reconnecting' && s.status === 'processing') {
+      indicator.classList.remove('hidden');
+      const attempt = s.reconnectAttempts || 0;
+      text.textContent = attempt > 0
+        ? `Reconnecting (attempt ${attempt})…`
+        : 'Reconnecting…';
+    } else if (status === 'reconnecting') {
+      indicator.classList.remove('hidden');
+      text.textContent = 'Reconnecting…';
+    } else if (status === 'connected' && s.isReconnecting) {
+      indicator.classList.remove('hidden');
+      text.textContent = 'Reconnected ✓';
+      // Auto-hide after 2 seconds
+      setTimeout(() => {
+        const s2 = getState();
+        if (s2.connectionStatus === 'connected') {
+          document.getElementById('reconnect-indicator')?.classList.add('hidden');
+        }
+      }, 2000);
+      // Reset reconnecting flag
+      setState({ isReconnecting: false });
+    } else {
+      indicator.classList.add('hidden');
+    }
+  });
   subscribe('nodesLoading', (loading) => {
     if (loading) showAssemblingCouncil();
   });
