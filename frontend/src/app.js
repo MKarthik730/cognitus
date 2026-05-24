@@ -40,6 +40,7 @@ export function init() {
   });
   document.getElementById('btn-presets').addEventListener('click', togglePresetsDropdown);
   document.getElementById('btn-add-case-node').addEventListener('click', addCaseNode);
+  document.getElementById('btn-add-node').addEventListener('click', addCaseNode);
 
   setupOutputsDelegation();
 
@@ -188,6 +189,7 @@ function switchMode(mode) {
   });
   document.getElementById('case-files-section').classList.toggle('hidden', mode !== 'case-study');
   document.getElementById('node-builder-section').classList.toggle('hidden', mode !== 'case-study');
+  document.getElementById('btn-add-node').classList.toggle('hidden', mode !== 'case-study');
   document.getElementById('question-input').classList.toggle('hidden', mode === 'case-study');
   document.getElementById('case-question-input').classList.toggle('hidden', mode !== 'case-study');
   const btnAnalyze = document.getElementById('btn-analyze');
