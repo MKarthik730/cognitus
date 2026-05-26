@@ -17,6 +17,20 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ![Cognitus Pipeline](./pipeline.svg)
 
+### Pipeline Flow
+
+1. **Case Decomposer** — The Distributor breaks the situation into 3–5 specific, independent sub-questions, each assigned to a domain
+2. **Expert Nodes** — Each expert receives their *specific sub-question* plus the full situation as context, producing focused, non-overlapping analyses
+3. **Cross-Check** — Identifies contradictions and agreements between experts
+4. **Synthesis** — Forced commitment: picks ONE primary recommendation, no hedging
+
+### WebSocket Resilience
+
+- **Auto-reconnect** — Frontend retries with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts)
+- **Event History** — Last 100 events per session stored in Redis (10min TTL)
+- **Resume on Reconnect** — Missed events are replayed; partial node results recovered
+- **In-memory Rate Limiter** — Falls back when Redis is unavailable (single-process only)
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -139,6 +153,7 @@ After extraction, before analysis:
 All nodes run in parallel. Each receives:
 - Their **behavior** system prompt
 - The **case context**
+- Their **specific sub-question** (from the case decomposer)
 - The **guiding question** (optional)
 
 Each response is parsed as **structured JSON** matching a Pydantic `NodeOutput` schema (`confidence`, `position`, `reasoning`, `key_findings`, `concerns`). Responses with markdown fences are auto-cleaned, validated, and hallucination-checked before acceptance.
@@ -151,11 +166,23 @@ On JSON parse failure, the node is re-prompted once. If both attempts fail, the 
 
 **Node Outputs tab:** One card per node with colored left border · Position · Key Findings · Concerns · Reasoning (collapsible) · Cross-Check card at bottom
 
-## Standard Mode — Dynamic Node Selection
+## Standard Mode — Case Decomposition + Expert Analysis
 
-In Standard mode, the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the question and selects 3–5 relevant expert roles on the fly. Responses are parsed as **structured JSON** (Pydantic `NodeOutput` schema). On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
+In Standard mode, the **Distributor** (case decomposer) breaks the situation into 3–5 specific analytical sub-questions, each assigned to a domain. Then the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the situation and selects 3–5 relevant expert roles on the fly. Each expert receives their *specific sub-question* plus the full situation as context.
+
+Responses are parsed as **structured JSON** (Pydantic `NodeOutput` schema). On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
 
 Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
+
+## WebSocket Resilience
+
+The frontend includes automatic reconnection with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts). If the WebSocket disconnects mid-analysis:
+
+1. The frontend tracks the last received event ID
+2. On reconnect, it sends a `resume` message with the session ID and last event ID
+3. The backend replays missed events from Redis (last 100 events, 10min TTL)
+4. Partial node results are recovered for nodes that hadn't completed yet
+5. After 5 failed attempts, the UI shows "Connection lost — Click Retry"
 
 ## API Endpoints
 

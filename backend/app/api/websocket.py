@@ -8,8 +8,14 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
+from sqlalchemy import select
+
 from backend.app.core.config import settings
+from backend.app.core.database import async_session
 from backend.app.graph.state import PipelineStatus
+from backend.app.models.case_study_context import CaseStudyContext
+from backend.app.models.case_study_node import CaseStudyNode
+from backend.app.models.session import Session
 from backend.app.schemas.node_output import (
     NodeOutput,
     clean_json_response,
@@ -619,6 +625,51 @@ async def websocket_endpoint(
             nodes = data.get("nodes", [])
             guiding_question = data.get("guidingQuestion", "")
             case_context = data.get("caseContext", "")
+            # Persist case study nodes and context to DB
+            try:
+                async with async_session() as db:
+                    # Get or create session record
+                    result = await db.execute(
+                        select(Session).where(Session.id == int(session_id))
+                    )
+                    db_session = result.scalar_one_or_none()
+                    if db_session:
+                        # Upsert nodes
+                        for idx, node in enumerate(nodes):
+                            stmt = select(CaseStudyNode).where(
+                                CaseStudyNode.session_id == int(session_id),
+                                CaseStudyNode.name == node["name"],
+                            )
+                            existing = (await db.execute(stmt)).scalar_one_or_none()
+                            if existing:
+                                existing.role = node.get("role", "")
+                                existing.behavior = node.get("behavior", "")
+                                existing.color = node.get("color", "")
+                                existing.order_index = idx
+                            else:
+                                db.add(
+                                    CaseStudyNode(
+                                        session_id=int(session_id),
+                                        name=node["name"],
+                                        role=node.get("role", ""),
+                                        behavior=node.get("behavior", ""),
+                                        color=node.get("color", ""),
+                                        order_index=idx,
+                                    )
+                                )
+                        # Save context if provided
+                        if case_context:
+                            db.add(
+                                CaseStudyContext(
+                                    session_id=int(session_id),
+                                    file_name="case_context",
+                                    extracted_text=case_context,
+                                    was_summarized=False,
+                                )
+                            )
+                        await db.commit()
+            except Exception as e:
+                logger.warning("Failed to persist case study data: %s", e)
             await _handle_case_study(sender, nodes, guiding_question, case_context)
             return
 

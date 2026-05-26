@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from backend.app.core.config import settings
 from backend.app.graph.state import ExpertOutput
@@ -109,8 +110,10 @@ class ExpertNode:
         self.hf_service = hf_service
 
     async def analyze(self, situation: str) -> ExpertOutput:
+        start = time.monotonic()
         node_output, model = await self._generate_node_output(situation)
-        return self._to_expert_output(node_output, model)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        return self._to_expert_output(node_output, model, elapsed_ms)
 
     async def _generate_node_output(
         self, situation: str, is_retry: bool = False
@@ -176,7 +179,7 @@ class ExpertNode:
             return None
 
     def _to_expert_output(
-        self, node_output: NodeOutput | None, model: str
+        self, node_output: NodeOutput | None, model: str, elapsed_ms: int = 0
     ) -> ExpertOutput:
         """Convert a NodeOutput (or None for errors) to an ExpertOutput TypedDict.
 
@@ -189,7 +192,7 @@ class ExpertNode:
                 analysis="",
                 confidence="low",
                 model_used=model,
-                processing_time_ms=0,
+                processing_time_ms=elapsed_ms,
             )
 
         # Build a readable summary from structured fields for backward compat
@@ -215,5 +218,5 @@ class ExpertNode:
             key_findings=node_output.key_findings,
             concerns=node_output.concerns,
             model_used=model,
-            processing_time_ms=0,
+            processing_time_ms=elapsed_ms,
         )

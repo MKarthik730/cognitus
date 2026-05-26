@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import get_args
 
+from backend.app.agents.expert_node import DOMAIN_PROMPTS
 from backend.app.core.config import settings
-from backend.app.graph.state import DistributorOutput, DomainName
+from backend.app.graph.state import DistributorOutput
 from backend.app.schemas.node_output import clean_json_response
 from backend.app.services.hf_service import HFService
 
@@ -28,7 +28,7 @@ RETRY_PROMPT = (
     "Retry now, responding ONLY with the JSON object."
 )
 
-_VALID_DOMAINS: set[str] = set(get_args(DomainName))
+_VALID_DOMAINS: set[str] = set(DOMAIN_PROMPTS.keys())
 
 
 class DistributorNode:
