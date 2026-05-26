@@ -1763,6 +1763,42 @@ html, body {
   filter: drop-shadow(0 0 8px var(--danger));
 }
 
+/* Retry button */
+.btn-retry {
+  padding: 6px 14px;
+  border: 0.5px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-retry:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Reconnect indicator — retry state */
+.reconnect-indicator.retry-state {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 25%, transparent);
+  animation: none;
+}
+
+.reconnect-indicator.retry-state .reconnect-dot {
+  background: var(--danger);
+  animation: none;
+}
+
+.reconnect-indicator.retry-state .reconnect-text {
+  color: var(--danger);
+}
+
 /* Utility */
 .hidden {
   display: none !important;
