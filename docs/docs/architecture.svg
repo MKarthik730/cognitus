@@ -1,0 +1,113 @@
+<svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrR" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#6366f1"/>
+    </marker>
+    <marker id="arrL" markerWidth="8" markerHeight="6" refX="1" refY="3" orient="auto">
+      <path d="M8,0 L0,3 L8,6 Z" fill="#6366f1"/>
+    </marker>
+    <marker id="arrRgray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#4b5563"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="420" rx="14" fill="url(#bg)"/>
+  <rect width="900" height="420" rx="14" fill="none" stroke="#21262d" stroke-width="1.5"/>
+  <text x="450" y="34" text-anchor="middle" fill="#8b949e" font-size="11" font-weight="500" letter-spacing="3">COGNITUS · SYSTEM ARCHITECTURE</text>
+
+  <!-- ── FRONTEND ── -->
+  <rect x="28" y="56" width="218" height="318" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1.2"/>
+  <rect x="28" y="56" width="218" height="36" rx="10" fill="#161b22"/>
+  <rect x="28" y="80" width="218" height="12" fill="#161b22"/>
+  <text x="137" y="78" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="700" letter-spacing="1">FRONTEND</text>
+  <text x="137" y="91" text-anchor="middle" fill="#4b5563" font-size="9">Vite 5 · Vanilla JS · Canvas API</text>
+
+  <rect x="44" y="106" width="186" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="137" y="122" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Canvas Graph</text>
+  <text x="137" y="137" text-anchor="middle" fill="#4b5563" font-size="9">Nodes · edges · minimap · zoom/pan</text>
+
+  <rect x="44" y="154" width="186" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="137" y="170" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Node Builder</text>
+  <text x="137" y="185" text-anchor="middle" fill="#4b5563" font-size="9">Custom agents · preset templates</text>
+
+  <rect x="44" y="202" width="186" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="137" y="218" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">File Extraction</text>
+  <text x="137" y="233" text-anchor="middle" fill="#4b5563" font-size="9">PDF.js · mammoth.js · FileReader</text>
+
+  <rect x="44" y="250" width="186" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="137" y="266" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Reactive Store</text>
+  <text x="137" y="281" text-anchor="middle" fill="#4b5563" font-size="9">subscribe(key, fn) · WS event handler</text>
+
+  <rect x="44" y="298" width="186" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="137" y="314" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">WS Client</text>
+  <text x="137" y="329" text-anchor="middle" fill="#4b5563" font-size="9">Reconnect · backoff · resume</text>
+
+  <!-- WS bidirectional arrows -->
+  <line x1="246" y1="205" x2="318" y2="205" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrR)"/>
+  <line x1="318" y1="218" x2="246" y2="218" stroke="#6366f1" stroke-width="1.5" marker-end="url(#arrL)"/>
+  <text x="282" y="198" text-anchor="middle" fill="#6366f1" font-size="9" font-weight="600">WebSocket</text>
+  <text x="282" y="230" text-anchor="middle" fill="#4b5563" font-size="9">HTTP / REST</text>
+
+  <!-- ── BACKEND ── -->
+  <rect x="318" y="56" width="244" height="318" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1.2"/>
+  <rect x="318" y="56" width="244" height="36" rx="10" fill="#161b22"/>
+  <rect x="318" y="80" width="244" height="12" fill="#161b22"/>
+  <text x="440" y="78" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="700" letter-spacing="1">BACKEND</text>
+  <text x="440" y="91" text-anchor="middle" fill="#4b5563" font-size="9">Python 3.12 · FastAPI · Uvicorn</text>
+
+  <rect x="334" y="106" width="212" height="56" rx="6" fill="#13103a" stroke="#6366f1" stroke-width="1.2"/>
+  <text x="440" y="126" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="700">LangGraph Pipeline</text>
+  <text x="440" y="142" text-anchor="middle" fill="#6366f1" font-size="9">Distributor → Experts (parallel)</text>
+  <text x="440" y="155" text-anchor="middle" fill="#6366f1" font-size="9">Cross-Check → Synthesizer</text>
+
+  <rect x="334" y="170" width="212" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="440" y="186" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Auth + Sessions</text>
+  <text x="440" y="201" text-anchor="middle" fill="#4b5563" font-size="9">JWT · bcrypt · CRUD routes</text>
+
+  <rect x="334" y="218" width="212" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="440" y="234" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Rate Limiter</text>
+  <text x="440" y="249" text-anchor="middle" fill="#4b5563" font-size="9">Redis token bucket · burst / hr / daily</text>
+
+  <rect x="334" y="266" width="212" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="440" y="282" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">File Upload</text>
+  <text x="440" y="297" text-anchor="middle" fill="#4b5563" font-size="9">PyMuPDF · python-docx · HF image</text>
+
+  <rect x="334" y="314" width="212" height="40" rx="6" fill="#161b22" stroke="#21262d"/>
+  <text x="440" y="330" text-anchor="middle" fill="#c9d1d9" font-size="11" font-weight="600">Queue Worker</text>
+  <text x="440" y="345" text-anchor="middle" fill="#4b5563" font-size="9">Redis BLPOP · async task queue</text>
+
+  <!-- arrows backend → infra -->
+  <line x1="562" y1="134" x2="628" y2="100" stroke="#4b5563" stroke-width="1.2" marker-end="url(#arrRgray)"/>
+  <line x1="562" y1="215" x2="628" y2="215" stroke="#4b5563" stroke-width="1.2" marker-end="url(#arrRgray)"/>
+  <line x1="562" y1="310" x2="628" y2="340" stroke="#4b5563" stroke-width="1.2" marker-end="url(#arrRgray)"/>
+
+  <!-- ── INFRA ── -->
+  <!-- HuggingFace -->
+  <rect x="628" y="60" width="236" height="90" rx="10" fill="#1a1200" stroke="#f59e0b" stroke-width="1.8" filter="url(#glow)"/>
+  <text x="746" y="84" text-anchor="middle" fill="#fbbf24" font-size="10" letter-spacing="2">LLM PROVIDER</text>
+  <text x="746" y="103" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">HuggingFace Router</text>
+  <text x="746" y="120" text-anchor="middle" fill="#78350f" font-size="9">Mistral-7B → Zephyr-7B → Phi-3</text>
+  <text x="746" y="135" text-anchor="middle" fill="#78350f" font-size="9">tenacity · exponential backoff</text>
+
+  <!-- PostgreSQL -->
+  <rect x="628" y="170" width="236" height="90" rx="10" fill="#040d1a" stroke="#0ea5e9" stroke-width="1.8" filter="url(#glow)"/>
+  <text x="746" y="194" text-anchor="middle" fill="#38bdf8" font-size="10" letter-spacing="2">DATABASE</text>
+  <text x="746" y="213" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">PostgreSQL 16</text>
+  <text x="746" y="230" text-anchor="middle" fill="#1e3a4f" font-size="9">asyncpg · SQLAlchemy 2.0</text>
+  <text x="746" y="245" text-anchor="middle" fill="#1e3a4f" font-size="9">7 tables · full indexing</text>
+
+  <!-- Redis -->
+  <rect x="628" y="280" width="236" height="90" rx="10" fill="#180808" stroke="#ef4444" stroke-width="1.8" filter="url(#glow)"/>
+  <text x="746" y="304" text-anchor="middle" fill="#f87171" font-size="10" letter-spacing="2">CACHE + QUEUE</text>
+  <text x="746" y="323" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Redis 7</text>
+  <text x="746" y="340" text-anchor="middle" fill="#4a1515" font-size="9">Response cache · WS event log</text>
+  <text x="746" y="355" text-anchor="middle" fill="#4a1515" font-size="9">Rate limiter · task queue · pub/sub</text>
+</svg>
