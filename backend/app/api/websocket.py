@@ -75,6 +75,157 @@ def _parse_json_response(raw: str) -> dict[str, Any] | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Redis-backed event history for WebSocket reconnection recovery
+# ---------------------------------------------------------------------------
+
+WS_EVENTS_KEY = "ws_events:{session_id}"
+WS_PARTIAL_KEY = "partial:{session_id}:{node_name}"
+WS_EVENTS_TTL = 600  # 10 minutes
+WS_EVENTS_MAX = 100  # keep last 100 events
+
+
+async def _store_event(
+    redis: Redis, session_id: str, event: dict[str, Any]
+) -> None:
+    """Store a WebSocket event in Redis for later replay on reconnect."""
+    key = WS_EVENTS_KEY.format(session_id=session_id)
+    await redis.lpush(key, json.dumps(event))
+    await redis.ltrim(key, 0, WS_EVENTS_MAX - 1)
+    await redis.expire(key, WS_EVENTS_TTL)
+
+
+async def _fetch_events_after(
+    redis: Redis, session_id: str, last_event_id: int
+) -> list[dict[str, Any]]:
+    """Fetch events after a given event_id from the history."""
+    key = WS_EVENTS_KEY.format(session_id=session_id)
+    raw_events = await redis.lrange(key, 0, -1)
+    events: list[dict[str, Any]] = []
+    for raw in raw_events:
+        try:
+            evt = json.loads(raw)
+            if evt.get("event_id", 0) > last_event_id:
+                events.append(evt)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    # Reverse so they replay in original order (lpush = newest first)
+    events.reverse()
+    return events
+
+
+async def _store_partial_result(
+    redis: Redis, session_id: str, node_name: str, data: dict[str, Any]
+) -> None:
+    """Store a partial node result so it can be recovered on resume."""
+    key = WS_PARTIAL_KEY.format(session_id=session_id, node_name=node_name)
+    await redis.setex(key, WS_EVENTS_TTL, json.dumps(data))
+
+
+async def _get_partial_results(
+    redis: Redis, session_id: str, completed_node_names: set[str]
+) -> dict[str, Any]:
+    """Retrieve stored partial results for nodes that aren't yet complete."""
+    results: dict[str, Any] = {}
+    pattern = WS_PARTIAL_KEY.format(session_id=session_id, node_name="*")
+    cursor = 0
+    while True:
+        cursor, keys = await redis.scan(
+            cursor=cursor, match=pattern, count=50
+        )
+        for key in keys:
+            parts = key.split(":")
+            node_name = parts[-1]
+            if node_name in completed_node_names:
+                continue
+            raw = await redis.get(key)
+            if raw:
+                try:
+                    results[node_name] = json.loads(raw)
+                except json.JSONDecodeError:
+                    pass
+        if cursor == 0:
+            break
+    return results
+
+
+class EventSender:
+    """Wrapper around WebSocket.send_json that auto-increments event_id
+    and persists events to Redis for reconnection recovery."""
+
+    def __init__(
+        self, websocket: WebSocket, redis: Redis | None, session_id: str
+    ) -> None:
+        self.websocket = websocket
+        self.redis = redis
+        self.session_id = session_id
+        self._counter: list[int] = [0]
+
+    @property
+    def last_event_id(self) -> int:
+        return self._counter[0]
+
+    async def send(self, event: dict[str, Any]) -> None:
+        self._counter[0] += 1
+        event["event_id"] = self._counter[0]
+        # Store in Redis BEFORE sending so events survive a mid-send disconnect
+        if self.redis is not None:
+            await _store_event(self.redis, self.session_id, event)
+        await self.websocket.send_json(event)
+
+    async def send_reconnect_banner(self) -> None:
+        """Notify frontend that events are being replayed after resume."""
+        await self.websocket.send_json({
+            "type": "resume_start",
+            "last_event_id": self._counter[0],
+        })
+
+
+async def _handle_resume(
+    sender: EventSender,
+    redis: Redis,
+    original_session_id: str,
+    last_event_id: int,
+) -> None:
+    """Replay missed events from a previous session after reconnect.
+
+    Also retrieves partial node results so the frontend can pick up
+    where it left off.
+    """
+    await sender.send_reconnect_banner()
+
+    events = await _fetch_events_after(redis, original_session_id, last_event_id)
+    for event in events:
+        # Re-assign event_id under the new session's counter
+        sender._counter[0] += 1
+        event["event_id"] = sender._counter[0]
+        await sender.websocket.send_json(event)
+
+    # Check for partial results
+    completed_nodes: set[str] = set()
+    for evt in events:
+        domain = evt.get("domain") or evt.get("node", "")
+        if evt.get("type") in ("expert_complete", "case_expert_complete", "node_complete"):
+            completed_nodes.add(domain)
+    partials = await _get_partial_results(redis, original_session_id, completed_nodes)
+    if partials:
+        await sender.websocket.send_json({
+            "type": "partial_results",
+            "data": partials,
+        })
+
+    await sender.websocket.send_json({
+        "type": "resume_complete",
+        "replayed": len(events),
+        "partials": len(partials),
+    })
+
+    logger.info(
+        "Resumed session %s: replayed %d events, recovered %d partials",
+        original_session_id, len(events), len(partials),
+    )
+
+
 async def _generate_with_retry(
     hf_service: HFService,
     system_prompt: str,
@@ -101,7 +252,7 @@ async def _generate_with_retry(
 
 
 async def _handle_case_study(
-    websocket: WebSocket,
+    sender: EventSender,
     nodes: list[dict[str, str]],
     guiding_question: str,
     case_context: str,
@@ -128,7 +279,7 @@ async def _handle_case_study(
         else "Analyze this case thoroughly from your perspective."
     )
 
-    await websocket.send_json(
+    await sender.send(
         {"type": "case_node_start", "node": "experts", "status": "expert_processing"}
     )
 
@@ -162,13 +313,13 @@ async def _handle_case_study(
     for node, result in zip(nodes, raw_results):
         name = node["name"]
         if isinstance(result, Exception):
-            await websocket.send_json(
+            await sender.send(
                 {"type": "expert_error", "domain": name, "error": str(result)}
             )
         else:
             parsed_data, model_used = result
             if parsed_data is None:
-                await websocket.send_json(
+                await sender.send(
                     {
                         "type": "expert_error",
                         "domain": name,
@@ -186,7 +337,10 @@ async def _handle_case_study(
                 "model_used": model_used,
             }
             experts[name] = expert_entry
-            await websocket.send_json(
+            # Store partial result
+            if sender.redis is not None:
+                await _store_partial_result(sender.redis, sender.session_id, name, expert_entry)
+            await sender.send(
                 {
                     "type": "case_expert_complete",
                     "domain": name,
@@ -194,7 +348,7 @@ async def _handle_case_study(
                 }
             )
 
-    await websocket.send_json({"type": "case_cross_check", "status": "cross_checking"})
+    await sender.send({"type": "case_cross_check", "status": "cross_checking"})
 
     # Compute consensus from stored expert confidence levels
     confidence_map = {"low": 0.2, "medium": 0.5, "high": 0.8}
@@ -235,10 +389,10 @@ async def _handle_case_study(
             "consensus_score": consensus,
         }
 
-    await websocket.send_json({"type": "case_cross_check", "data": cross_check_data})
+    await sender.send({"type": "case_cross_check", "data": cross_check_data})
 
     # Synthesis
-    await websocket.send_json({"type": "case_synthesize", "status": "synthesizing"})
+    await sender.send({"type": "case_synthesize", "status": "synthesizing"})
 
     try:
         synth_response, _ = await hf_service.generate(
@@ -264,9 +418,9 @@ async def _handle_case_study(
         logger.warning("Synthesis generation failed: %s", e)
         synthesis_data = {"verdict": "Synthesis could not be generated."}
 
-    await websocket.send_json({"type": "case_synthesize", "data": synthesis_data})
+    await sender.send({"type": "case_synthesize", "data": synthesis_data})
 
-    await websocket.send_json(
+    await sender.send(
         {
             "type": "case_complete",
             "data": {
@@ -279,14 +433,14 @@ async def _handle_case_study(
 
 
 async def _stream_graph_events(
-    websocket: WebSocket,
+    sender: EventSender,
     situation: str,
     session_id: str,
     user_id: int,
     council_graph: CouncilGraph,
 ) -> None:
     async def on_node_start(node_name: str, status_text: str) -> None:
-        await websocket.send_json(
+        await sender.send(
             {
                 "type": "node_start",
                 "node": node_name,
@@ -296,9 +450,9 @@ async def _stream_graph_events(
 
     selector = NodeSelector(council_graph.hf_service)
 
-    await websocket.send_json({"type": "node_selection_start"})
+    await sender.send({"type": "node_selection_start"})
     selected_nodes = await selector.select_nodes(situation)
-    await websocket.send_json(
+    await sender.send(
         {
             "type": "node_selection_complete",
             "nodes": selected_nodes,
@@ -326,7 +480,7 @@ async def _stream_graph_events(
     experts: dict[str, Any] = {}
     for domain, result in zip(domains, raw_results):
         if isinstance(result, Exception):
-            await websocket.send_json(
+            await sender.send(
                 {
                     "type": "expert_error",
                     "domain": domain,
@@ -336,8 +490,11 @@ async def _stream_graph_events(
         else:
             output = result
             experts[domain] = output
+            # Store partial result
+            if sender.redis is not None:
+                await _store_partial_result(sender.redis, sender.session_id, domain, output)
             # Send structured data that frontend can use
-            await websocket.send_json(
+            await sender.send(
                 {
                     "type": "expert_complete",
                     "domain": domain,
@@ -356,7 +513,7 @@ async def _stream_graph_events(
 
     await on_node_start("cross_check", "cross_checking")
     cross_check_output = await cross_check_node.cross_check(experts)
-    await websocket.send_json(
+    await sender.send(
         {
             "type": "node_complete",
             "node": "cross_check",
@@ -372,7 +529,7 @@ async def _stream_graph_events(
     synthesis_output = await synthesizer_node.synthesize(
         situation, experts, cross_check_output
     )
-    await websocket.send_json(
+    await sender.send(
         {
             "type": "node_complete",
             "node": "synthesizer",
@@ -386,7 +543,7 @@ async def _stream_graph_events(
         }
     )
 
-    await websocket.send_json(
+    await sender.send(
         {
             "type": "complete",
             "data": {
@@ -426,31 +583,58 @@ async def websocket_endpoint(
         connected_clients[session_id] = []
     connected_clients[session_id].append(websocket)
 
+    # Connect to Redis for event history
+    redis: Redis | None = None
+    try:
+        redis = await get_redis()
+    except Exception as e:
+        logger.warning("Redis unavailable, reconnection recovery disabled: %s", e)
+
+    sender = EventSender(websocket, redis, session_id)
+
     try:
         data = await websocket.receive_json()
-        mode = data.get("mode", "")
 
+        # --- Handle resume message (reconnection recovery) ---
+        if data.get("type") == "resume":
+            original_session_id = data.get("session_id", session_id)
+            last_event_id = data.get("last_event_id", 0)
+            if redis is not None:
+                await _handle_resume(sender, redis, original_session_id, last_event_id)
+            else:
+                await sender.send({"type": "error", "message": "Redis unavailable, cannot replay events"})
+            return
+
+        # --- Clear old event history for a fresh analysis ---
+        if redis is not None:
+            try:
+                key = WS_EVENTS_KEY.format(session_id=session_id)
+                await redis.delete(key)
+            except Exception:
+                pass
+
+        # --- Handle case study mode ---
+        mode = data.get("mode", "")
         if mode == "case_study":
             nodes = data.get("nodes", [])
             guiding_question = data.get("guidingQuestion", "")
             case_context = data.get("caseContext", "")
-            await _handle_case_study(websocket, nodes, guiding_question, case_context)
+            await _handle_case_study(sender, nodes, guiding_question, case_context)
             return
 
+        # --- Handle standard analysis mode ---
         situation = data.get("situation", "")
         user_id = data.get("user_id", 0)
 
         if not situation:
-            await websocket.send_json(
-                {"type": "error", "message": "situation is required"}
-            )
+            await sender.send({"type": "error", "message": "situation is required"})
             return
 
         hf_service = HFService()
         council_graph = CouncilGraph(hf_service)
 
         await _stream_graph_events(
-            websocket, situation, session_id, user_id, council_graph
+            sender, situation, session_id, user_id, council_graph
         )
 
     except WebSocketDisconnect:
@@ -458,10 +642,15 @@ async def websocket_endpoint(
     except Exception as e:
         logger.error("WebSocket error: %s", e)
         try:
-            await websocket.send_json({"type": "error", "message": str(e)})
+            await sender.send({"type": "error", "message": str(e)})
         except Exception:
             pass
     finally:
+        if redis is not None:
+            try:
+                await redis.aclose()
+            except Exception:
+                pass
         if session_id in connected_clients:
             connected_clients[session_id].remove(websocket)
             if not connected_clients[session_id]:

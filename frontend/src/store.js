@@ -97,6 +97,45 @@ export function handleWsEvent(event) {
       s.status = 'failed';
       break;
 
+    case 'connection_lost':
+      s.connectionStatus = 'disconnected';
+      s.isReconnecting = false;
+      s.error = event.message || 'Connection lost. Click Retry to reconnect.';
+      s.status = 'failed';
+      break;
+
+    case 'resume_start':
+      // Backend is about to replay missed events after reconnect
+      s.connectionStatus = 'reconnecting';
+      s.isReconnecting = true;
+      break;
+
+    case 'resume_complete':
+      // Backend has finished replaying events
+      s.connectionStatus = 'connected';
+      s.isReconnecting = false;
+      break;
+
+    case 'partial_results':
+      // Backend sent partial node results from a previous session
+      if (event.data) {
+        const partials = event.data;
+        const existingExperts = [...s.experts];
+        Object.entries(partials).forEach(([domain, data]) => {
+          if (!existingExperts.find(e => e.domain === domain)) {
+            existingExperts.push({
+              domain,
+              analysis: data.analysis || data.reasoning || '',
+              confidence: data.confidence || 'medium',
+              model_used: data.model_used || '',
+              processing_time_ms: 0,
+            });
+          }
+        });
+        s.experts = existingExperts;
+      }
+      break;
+
     case 'node_selection_start':
       s.nodesLoading = true;
       s.dynamicNodes = [];
