@@ -1,6 +1,7 @@
 const subscribers = new Map();
 
 let state = {
+  mode: 'case-study',
   situation: '',
   status: 'idle',
   activeTab: 'verdict',

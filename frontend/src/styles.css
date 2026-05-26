@@ -41,6 +41,10 @@
   /* Layout */
   --panel-left-width: 260px;
   --panel-right-width: 320px;
+  --panel-left-min: 180px;
+  --panel-left-max: 400px;
+  --panel-right-min: 180px;
+  --panel-right-max: 500px;
   --top-bar-height: 56px;
 }
 
@@ -74,6 +78,41 @@ html, body {
   width: 100vw;
 }
 
+/* ---- Resizers ---- */
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 2px;
+  height: 100%;
+  background: var(--border);
+  transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
+  pointer-events: none;
+}
+
+.resizer:hover::after,
+.resizer.resizing::after {
+  background: var(--accent);
+  width: 3px;
+  left: 1.5px;
+}
+
+.resizer:hover,
+.resizer.resizing {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
 /* ---- LEFT PANEL ---- */
 .panel-left {
   width: var(--panel-left-width);
@@ -91,6 +130,7 @@ html, body {
   height: 100%;
   padding: 20px 16px 12px;
   gap: 20px;
+  overflow-y: auto;
 }
 
 .brand {

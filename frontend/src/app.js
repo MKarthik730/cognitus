@@ -26,6 +26,9 @@ export function init() {
   document.getElementById('case-question-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && getState().mode === 'case-study') startCaseAnalysis();
   });
+  document.getElementById('case-question-input').addEventListener('input', () => {
+    if (getState().mode === 'case-study') updateAnalyzeButton();
+  });
   document.getElementById('btn-stop').addEventListener('click', stopAnalysis);
 
   document.querySelectorAll('.right-tab').forEach(tab => {
@@ -38,9 +41,15 @@ export function init() {
   document.getElementById('btn-settings').addEventListener('click', () => {
     alert('Settings panel coming soon.');
   });
+
+  setupResizers();
+  setupFileDropZone();
   document.getElementById('btn-presets').addEventListener('click', togglePresetsDropdown);
   document.getElementById('btn-add-case-node').addEventListener('click', addCaseNode);
   document.getElementById('btn-add-node').addEventListener('click', addCaseNode);
+
+  // Start in case study mode
+  switchMode('case-study');
 
   setupOutputsDelegation();
 
@@ -268,7 +277,7 @@ function updateModeBadge() {
     badge.textContent = 'Failed';
     badge.className = 'mode-badge';
   } else {
-    badge.textContent = 'Standard';
+    badge.textContent = s.mode === 'case-study' ? 'Case Study' : 'Standard';
     badge.className = 'mode-badge';
   }
 }
@@ -746,18 +755,27 @@ function updateAnalyzeButton() {
   if (s.mode !== 'case-study') { btn.disabled = false; return; }
   const nodesOk = (s.caseStudy.nodes || []).length >= 2;
   const filesOk = (s.caseStudy.files || []).some(f => f.status === 'ready');
-  btn.disabled = !(nodesOk && filesOk);
+  const hasQuestion = document.getElementById('case-question-input').value.trim().length > 0;
+  btn.disabled = !(nodesOk && filesOk && hasQuestion);
 }
 
 function startCaseAnalysis() {
   const s = getState();
   const readyFiles = (s.caseStudy.files || []).filter(f => f.status === 'ready');
   const nodes = s.caseStudy.nodes || [];
-  if (nodes.length < 2) return;
-  if (readyFiles.length === 0) return;
+  const guidingQuestion = document.getElementById('case-question-input').value.trim();
+  if (!guidingQuestion) {
+    document.getElementById('case-question-input').focus();
+    document.getElementById('case-question-input').style.borderColor = 'var(--danger)';
+    setTimeout(() => {
+      document.getElementById('case-question-input').style.borderColor = '';
+    }, 2000);
+    return;
+  }
+  if (nodes.length < 2) { showError('Add at least 2 expert nodes in the left panel before analyzing.'); return; }
+  if (readyFiles.length === 0) { showError('Upload at least one case file before analyzing.'); return; }
 
   const caseContext = buildCaseContext();
-  const guidingQuestion = document.getElementById('case-question-input').value.trim();
 
   setState({
     status: 'processing',
@@ -786,6 +804,56 @@ function startCaseAnalysis() {
   };
 
   connectCaseStudy(payload, caseSessionId);
+}
+
+function setupResizers() {
+  function startResize(e, side) {
+    e.preventDefault();
+    const layout = document.getElementById('app');
+    const leftPanel = document.getElementById('left-panel');
+    const rightPanel = document.getElementById('right-panel');
+    const resizer = e.currentTarget;
+
+    const startX = e.clientX;
+    const startLeftWidth = leftPanel.getBoundingClientRect().width;
+    const startRightWidth = rightPanel.getBoundingClientRect().width;
+    const minLeft = 180;
+    const maxLeft = 400;
+    const minRight = 180;
+    const maxRight = 500;
+
+    resizer.classList.add('resizing');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMove(e) {
+      const dx = e.clientX - startX;
+      if (side === 'left') {
+        const newWidth = Math.min(Math.max(startLeftWidth + dx, minLeft), maxLeft);
+        leftPanel.style.width = newWidth + 'px';
+        layout.style.setProperty('--panel-left-width', newWidth + 'px');
+      } else {
+        const newWidth = Math.min(Math.max(startRightWidth - dx, minRight), maxRight);
+        rightPanel.style.width = newWidth + 'px';
+        layout.style.setProperty('--panel-right-width', newWidth + 'px');
+      }
+    }
+
+    function onUp() {
+      resizer.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  document.querySelectorAll('.resizer').forEach(el => {
+    el.addEventListener('mousedown', (e) => startResize(e, el.dataset.resizer));
+  });
 }
 
 function setupOutputsDelegation() {

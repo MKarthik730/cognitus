@@ -67,7 +67,7 @@ async def analyze(
 
         distributor_json = json.dumps(
             {
-                "domains": council_result.get("distributor", {}).get("domains", []),
+                "sub_questions": council_result.get("distributor", {}).get("sub_questions", []),
                 "reasoning": council_result.get("distributor", {}).get("reasoning", ""),
                 "model_used": council_result.get("distributor", {}).get(
                     "model_used", ""

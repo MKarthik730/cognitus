@@ -11,7 +11,7 @@ from backend.app.agents.cross_check import CrossCheckNode
 from backend.app.agents.distributor import DistributorNode
 from backend.app.agents.expert_node import ExpertNode
 from backend.app.agents.synthesizer import SynthesizerNode
-from backend.app.graph.state import CouncilState, DomainName
+from backend.app.graph.state import CouncilState
 from backend.app.services.hf_service import HFService
 
 
@@ -44,27 +44,36 @@ class CouncilGraph:
         return {"distributor": output, "status": "expert_processing"}
 
     async def _run_experts(self, state: CouncilState) -> dict[str, Any]:
-        domains: list[DomainName] = state["distributor"]["domains"]
-        experts: dict[str, Any] = {}
-        errors: list[str] = []
-        tasks = []
+        sub_questions = state["distributor"]["sub_questions"]
+        # Key by sub-question id (unique) to avoid overwriting when two
+        # sub-questions share the same domain
+        coroutines: dict[str, Any] = {}
+        coro_map: list[tuple[str, str, str]] = []  # (sq_id, domain, question)
 
-        for domain in domains:
+        for sq in sub_questions:
+            sq_id = sq["id"]
+            domain = sq["domain"]
+            question = sq["question"]
             node = ExpertNode(domain, self.hf_service)
-            tasks.append(node.analyze(state["situation"]))
+            coroutines[sq_id] = node.analyze(
+                state["situation"], sub_question=question, sub_question_id=sq_id
+            )
+            coro_map.append((sq_id, domain, question))
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*coroutines.values(), return_exceptions=True)
 
-        for domain, result in zip(domains, results):
+        resolved: dict[str, Any] = {}
+        errors: list[str] = []
+        for (sq_id, domain, _question), result in zip(coro_map, results):
             if isinstance(result, Exception):
-                errors.append(f"{domain}: {str(result)}")
+                errors.append(f"{domain} ({sq_id}): {str(result)}")
             else:
-                experts[domain] = result
+                resolved[sq_id] = result
 
-        result: dict[str, Any] = {"experts": experts, "status": "cross_checking"}
+        result_dict: dict[str, Any] = {"experts": resolved, "status": "cross_checking"}
         if errors:
-            result["errors"] = state.get("errors", []) + errors
-        return result
+            result_dict["errors"] = state.get("errors", []) + errors
+        return result_dict
 
     async def _run_cross_check(self, state: CouncilState) -> dict[str, Any]:
         output = await self.cross_checker.cross_check(state["experts"])

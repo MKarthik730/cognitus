@@ -97,6 +97,15 @@ RETRY_PROMPT = (
 )
 
 
+SUB_QUESTION_TEMPLATE = (
+    'Answer this specific question:\n'
+    '"{sub_question}"\n\n'
+    'Use the situation below as context. Be specific, cite the numbers '
+    'in the case, and take a clear position. Do not hedge.\n\n'
+    'SITUATION: {situation}'
+)
+
+
 class ExpertNode:
     def __init__(
         self, domain: str, hf_service: HFService, behavior: str | None = None
@@ -108,12 +117,23 @@ class ExpertNode:
         self.system_prompt = base_prompt + JSON_SCHEMA_SUFFIX
         self.hf_service = hf_service
 
-    async def analyze(self, situation: str) -> ExpertOutput:
-        node_output, model = await self._generate_node_output(situation)
-        return self._to_expert_output(node_output, model)
+    async def analyze(
+        self, situation: str, sub_question: str | None = None, sub_question_id: str | None = None
+    ) -> ExpertOutput:
+        user_prompt = self._build_user_prompt(situation, sub_question)
+        node_output, model = await self._generate_node_output(user_prompt)
+        return self._to_expert_output(node_output, model, sub_question, sub_question_id)
+
+    def _build_user_prompt(self, situation: str, sub_question: str | None) -> str:
+        if sub_question:
+            return SUB_QUESTION_TEMPLATE.format(
+                sub_question=sub_question,
+                situation=situation,
+            )
+        return situation
 
     async def _generate_node_output(
-        self, situation: str, is_retry: bool = False
+        self, user_prompt: str, is_retry: bool = False
     ) -> tuple[NodeOutput | None, str]:
         """Generate and validate structured node output from the LLM.
 
@@ -126,7 +146,7 @@ class ExpertNode:
 
         response, model = await self.hf_service.generate(
             system,
-            situation,
+            user_prompt,
             max_tokens=settings.HF_EXPERT_MAX_TOKENS,
         )
 
@@ -139,7 +159,7 @@ class ExpertNode:
                     self.domain,
                     response,
                 )
-                return await self._generate_node_output(situation, is_retry=True)
+                return await self._generate_node_output(user_prompt, is_retry=True)
             logger.error(
                 "Expert %s: JSON parse failed after retry. Marking as error.",
                 self.domain,
@@ -153,7 +173,7 @@ class ExpertNode:
                     "Expert %s: Hallucination detected, retrying once.",
                     self.domain,
                 )
-                return await self._generate_node_output(situation, is_retry=True)
+                return await self._generate_node_output(user_prompt, is_retry=True)
             logger.error(
                 "Expert %s: Hallucination detected after retry. Marking as error.",
                 self.domain,
@@ -176,7 +196,11 @@ class ExpertNode:
             return None
 
     def _to_expert_output(
-        self, node_output: NodeOutput | None, model: str
+        self,
+        node_output: NodeOutput | None,
+        model: str,
+        sub_question: str | None = None,
+        sub_question_id: str | None = None,
     ) -> ExpertOutput:
         """Convert a NodeOutput (or None for errors) to an ExpertOutput TypedDict.
 
@@ -205,7 +229,7 @@ class ExpertNode:
             for concern in node_output.concerns:
                 readable_analysis += f"- {concern}\n"
 
-        return ExpertOutput(
+        result = ExpertOutput(
             domain=self.domain,
             analysis=readable_analysis,
             confidence=confidence_to_level(node_output.confidence),
@@ -217,3 +241,8 @@ class ExpertNode:
             model_used=model,
             processing_time_ms=0,
         )
+        if sub_question:
+            result["sub_question"] = sub_question
+        if sub_question_id:
+            result["sub_question_id"] = sub_question_id
+        return result

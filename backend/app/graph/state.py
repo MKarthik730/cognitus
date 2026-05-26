@@ -26,8 +26,14 @@ class SelectedNode(TypedDict):
     behavior: str
 
 
+class SubQuestion(TypedDict):
+    id: str
+    question: str
+    domain: DomainName
+
+
 class DistributorOutput(TypedDict):
-    domains: list[DomainName]
+    sub_questions: list[SubQuestion]
     reasoning: str
     model_used: str
 
@@ -45,6 +51,8 @@ class ExpertOutput(TypedDict):
     model_used: str
     processing_time_ms: int
     revision: NotRequired[str | None]
+    sub_question: NotRequired[str]
+    sub_question_id: NotRequired[str]
 
 
 class Contradiction(TypedDict):

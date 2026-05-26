@@ -43,7 +43,9 @@ RETRY_PROMPT = (
 
 def _build_user_prompt(experts: dict[str, ExpertOutput]) -> str:
     sections: list[str] = []
-    for domain, output in experts.items():
+    for _sq_id, output in experts.items():
+        domain = output.get("domain", "").upper()
+        sub_q = output.get("sub_question", "")
         # Use structured fields if available, fall back to raw analysis
         position = output.get("position") or ""
         key_findings = output.get("key_findings") or []
@@ -52,8 +54,12 @@ def _build_user_prompt(experts: dict[str, ExpertOutput]) -> str:
         citations = output.get("citations")
         citations_block = f"Citations: {', '.join(citations)}\n" if citations else ""
 
+        header = f"[{domain} EXPERT]\n"
+        if sub_q:
+            header = f"[{domain} — {sub_q[:80]}]\n"
+
         sections.append(
-            f"[{domain.upper()} EXPERT]\n"
+            f"{header}"
             f"Position: {position}\n"
             f"Key Findings: {'; '.join(key_findings)}\n"
             f"Concerns: {'; '.join(concerns)}\n"
