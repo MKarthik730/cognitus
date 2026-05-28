@@ -9,7 +9,7 @@ let nodes = [];
 
 const NODE_W = 160;
 const NODE_H = 48;
-const NODE_R = 10;
+const NODE_R = 12;
 const LEVEL_GAP = 110;
 const EXPERT_GAP = 200;
 
@@ -84,8 +84,7 @@ export function renderCanvas(state) {
   const w = rect.width;
   const h = rect.height;
 
-  const bgColor = resolveColor('--bg-primary');
-  ctx.fillStyle = bgColor;
+  ctx.fillStyle = '#0a0f1e';
   ctx.fillRect(0, 0, w, h);
 
   ctx.save();
@@ -119,23 +118,27 @@ export function renderCanvas(state) {
 }
 
 function drawNode(ctx, node, isActive, isComplete) {
-  const color = node.color || resolveColor(getNodeColor(node.type));
-
+  const nodeColor = node.color || resolveColor(getNodeColor(node.type));
   ctx.save();
 
-  if (isActive) {
-    const pulse = Math.sin(Date.now() / 300) * 0.15 + 0.15;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 16 * pulse;
-  }
-
-  const bg = hexToRgba(color, isActive ? 0.15 : isComplete ? 0.1 : 0.04);
-  ctx.fillStyle = bg;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = isActive ? 2 : 1.5;
-  ctx.globalAlpha = isComplete || isActive ? 1 : 0.6;
+  // Background: #0a0f1e
+  ctx.fillStyle = '#0a0f1e';
   roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
   ctx.fill();
+
+  // Border styling
+  if (isActive) {
+    ctx.strokeStyle = '#00ffcc';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#00ffcc';
+    ctx.shadowBlur = 16;
+  } else {
+    ctx.strokeStyle = 'rgba(124, 58, 237, 0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = isComplete || isActive ? 1 : 0.6;
+  roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
   ctx.stroke();
 
   ctx.shadowBlur = 0;
@@ -153,7 +156,7 @@ function drawNode(ctx, node, isActive, isComplete) {
     const dotR = 4;
     ctx.beginPath();
     ctx.arc(labelX, labelY, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.fillStyle = nodeColor;
     ctx.fill();
     ctx.font = '600 12px "DM Sans", sans-serif';
     ctx.fillStyle = '#e2e4eb';
@@ -185,6 +188,8 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
   const expertCount = domains.length || 1;
   const cx = w / 2 / scale - offsetX / scale;
 
+  const edges = [];
+
   domains.forEach((d, i) => {
     const ex = cx + (i - (expertCount - 1) / 2) * EXPERT_GAP;
     const srcX = dist.x + NODE_W / 2;
@@ -194,6 +199,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
 
     const isActiveLine = active === 'experts' || active === 'distributor';
     const isDone = expertComplete[d];
+    edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
     drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
   });
 
@@ -207,6 +213,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
       const tgtY = cross.y;
       const isActiveLine = active === 'cross_check';
       const isDone = expertComplete[d] && completed.crosscheck;
+      edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
       drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
     });
 
@@ -218,9 +225,27 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
       const tgtY = synth.y;
       const isActiveLine = active === 'synthesizer' || active === 'cross_check';
       const isDone = completed.crosscheck && completed.synthesizer;
+      edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
       drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
     }
   }
+
+  // Animated pulse dots on active edges
+  const now = Date.now() / 1000;
+  edges.forEach(edge => {
+    if (!edge.active) return;
+    const t = (now * 0.4) % 1;
+    const px = edge.x1 + (edge.x2 - edge.x1) * t;
+    const py = edge.y1 + (edge.y2 - edge.y1) * t;
+    ctx.save();
+    ctx.shadowColor = '#00ffcc';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#00ffcc';
+    ctx.fill();
+    ctx.restore();
+  });
 }
 
 function drawLine(ctx, x1, y1, x2, y2, isActive, isDone) {
@@ -228,11 +253,20 @@ function drawLine(ctx, x1, y1, x2, y2, isActive, isDone) {
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
-  ctx.strokeStyle = 'var(--border-strong)';
-  ctx.lineWidth = 1;
-  ctx.globalAlpha = isDone ? 0.9 : isActive ? 0.7 : 0.25;
-  if (isActive && !isDone) {
-    ctx.setLineDash([4, 4]);
+  if (isDone) {
+    ctx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
+    ctx.lineWidth = 2;
+  } else if (isActive) {
+    const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+    grad.addColorStop(0, '#00d4ff');
+    grad.addColorStop(1, '#7c3aed');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#7c3aed';
+    ctx.shadowBlur = 12;
+  } else {
+    ctx.strokeStyle = 'rgba(124, 58, 237, 0.2)';
+    ctx.lineWidth = 1.5;
   }
   ctx.stroke();
   ctx.restore();
@@ -250,8 +284,7 @@ function renderMinimap(state, mainW, mainH) {
   const mCtx = mCanvas.getContext('2d');
   mCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  const bg = resolveColor('--bg-secondary');
-  mCtx.fillStyle = bg;
+  mCtx.fillStyle = '#1a1f3a';
   mCtx.fillRect(0, 0, mw, mh);
 
   const scaleX = mw / mainW;

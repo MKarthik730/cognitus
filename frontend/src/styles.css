@@ -1,7 +1,7 @@
 :root {
   /* Backgrounds */
-  --bg-primary: #0f1117;
-  --bg-secondary: #161822;
+  --bg-primary: #0a0f1e;
+  --bg-secondary: #1a1f3a;
   --bg-tertiary: #1e2030;
 
   /* Text */
@@ -41,6 +41,10 @@
   /* Layout */
   --panel-left-width: 260px;
   --panel-right-width: 320px;
+  --panel-left-min: 180px;
+  --panel-left-max: 400px;
+  --panel-right-min: 180px;
+  --panel-right-max: 500px;
   --top-bar-height: 56px;
 }
 
@@ -74,6 +78,41 @@ html, body {
   width: 100vw;
 }
 
+/* ---- Resizers ---- */
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2px;
+  width: 2px;
+  height: 100%;
+  background: var(--border);
+  transition: background 0.15s ease, width 0.15s ease, left 0.15s ease;
+  pointer-events: none;
+}
+
+.resizer:hover::after,
+.resizer.resizing::after {
+  background: var(--accent);
+  width: 3px;
+  left: 1.5px;
+}
+
+.resizer:hover,
+.resizer.resizing {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
 /* ---- LEFT PANEL ---- */
 .panel-left {
   width: var(--panel-left-width);
@@ -91,6 +130,7 @@ html, body {
   height: 100%;
   padding: 20px 16px 12px;
   gap: 20px;
+  overflow-y: auto;
 }
 
 .brand {
@@ -297,6 +337,32 @@ html, body {
   border-color: var(--border-strong);
 }
 
+/* Ghost dashed button for Add Node */
+.btn-ghost-dashed {
+  width: 100%;
+  padding: 8px 14px;
+  border: 1px dashed rgba(124, 58, 237, 0.35);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(124, 58, 237, 0.7);
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.btn-ghost-dashed:hover {
+  border-color: rgba(124, 58, 237, 0.7);
+  background: rgba(124, 58, 237, 0.08);
+  color: rgba(124, 58, 237, 0.95);
+}
+
+.btn-ghost-dashed:active {
+  background: rgba(124, 58, 237, 0.15);
+}
+
 /* ---- CENTER PANEL ---- */
 .panel-center {
   flex: 1;
@@ -409,7 +475,7 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
-  background: color-mix(in srgb, var(--bg-primary) 92%, var(--accent) 8%);
+  background: color-mix(in srgb, #0a0f1e 92%, rgba(124, 58, 237, 0.5) 8%);
 }
 
 .canvas-controls {

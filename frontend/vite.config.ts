@@ -4,9 +4,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:8001",
+      "/api": "http://backend:8000",
       "/ws": {
-        target: "ws://localhost:8001",
+        target: "ws://backend:8000",
         ws: true,
       },
     },

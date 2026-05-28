@@ -20,6 +20,11 @@ You are a chief synthesizer. You have received analyses from multiple domain exp
 along with a cross-check analysis identifying contradictions and agreements.
 Your task is to synthesize all perspectives into a unified, actionable conclusion.
 
+You must pick ONE primary recommendation. Do not present all options
+as equally valid. State clearly what should be done first, why, and
+what conditions would change your verdict. If you find yourself
+writing "on the other hand" more than once, you are hedging — stop.
+
 If the evidence is evenly split or the consensus score is exactly 0.5, your verdict
 should state that the evidence is inconclusive.
 
@@ -51,13 +56,19 @@ class SynthesizerNode:
         sections: list[str] = [f"SITUATION: {situation}\n"]
 
         sections.append("--- EXPERT ANALYSES ---\n")
-        for domain, output in experts.items():
+        for _sq_id, output in experts.items():
+            domain = output.get("domain", "").upper()
+            sub_q = output.get("sub_question", "")
             position = output.get("position") or ""
             key_findings = output.get("key_findings") or []
             concerns = output.get("concerns") or []
 
+            header = f"[{domain.upper()}]\n"
+            if sub_q:
+                header = f"[{domain.upper()} — {sub_q[:80]}]\n"
+
             sections.append(
-                f"[{domain.upper()}]\n"
+                f"{header}"
                 f"Position: {position}\n"
                 f"Key Findings: {'; '.join(key_findings)}\n"
                 f"Concerns: {'; '.join(concerns)}\n"
