@@ -9,12 +9,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from backend.app.api.routes import auth, sessions, analyze
-from backend.app.api.upload import router as upload_router
-from backend.app.api.websocket import router as ws_router
-from backend.app.core.config import settings
-from backend.app.services.hf_service import HFService
-from backend.app.services.queue_worker import QueueWorker
+from app.api.routes import auth, sessions, analyze
+from app.api.upload import router as upload_router
+from app.api.websocket import router as ws_router
+from app.core.config import settings
+from app.services.hf_service import HFService
+from app.services.queue_worker import QueueWorker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -81,7 +81,7 @@ app.include_router(ws_router)
 
 @app.get("/api/nodes")
 async def list_domains():
-    from backend.app.agents.expert_node import DOMAIN_PROMPTS
+    from app.agents.expert_node import DOMAIN_PROMPTS
 
     return {
         "domains": [

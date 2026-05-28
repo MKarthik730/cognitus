@@ -7,8 +7,8 @@ from typing import Any
 
 from redis.asyncio import Redis
 
-from backend.app.services.hf_service import HFService
-from backend.app.graph.council_graph import CouncilGraph
+from app.services.hf_service import HFService
+from app.graph.council_graph import CouncilGraph
 
 logger = logging.getLogger(__name__)
 

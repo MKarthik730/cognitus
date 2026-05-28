@@ -90,7 +90,7 @@ async def _extract_text(file: UploadFile) -> str:
 
 
 async def _analyze_image(file: UploadFile, filename: str) -> str:
-    from backend.app.services.hf_service import HFService
+    from app.services.hf_service import HFService
 
     content = await file.read()
     ext = Path(filename).suffix.lower().lstrip(".")

@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from backend.app.models.analysis import Analysis
+    from app.models.analysis import Analysis
 
 
 class ExpertResponse(Base, TimestampMixin):

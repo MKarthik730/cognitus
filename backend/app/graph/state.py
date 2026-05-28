@@ -10,14 +10,16 @@ ConfidenceLevel = Literal["high", "medium", "low"]
 ContradictionType = Literal["direct", "partial", "complementary"]
 
 PipelineStatus = Literal[
-    "pending",
-    "distributing",
-    "expert_processing",
-    "cross_checking",
-    "synthesizing",
-    "completed",
-    "failed",
+    "pending", "distributing", "expert_processing",
+    "cross_checking", "synthesizing", "completed", "failed",
 ]
+
+AnalysisMode = Literal[
+    "standard", "case_study", "signal_vs_noise", "cascade_mapper",
+    "pre_mortem", "debate", "reverse_engineer", "iceberg",
+]
+
+GhostLevel = Literal["off", "fog", "shadow", "void", "phantom"]
 
 
 class SelectedNode(TypedDict):
@@ -73,6 +75,32 @@ class SynthesisOutput(TypedDict):
     consensus_score: float
     model_used: str
     processing_time_ms: int
+    # Intelligence Layer additions
+    minority_report: NotRequired[str]
+    what_would_change_my_mind: NotRequired[list[str]]
+    confidence_breakdown: NotRequired[dict[str, float]]
+
+
+class Assumption(TypedDict):
+    assumption: str
+    category: str  # factual | cultural | emotional | logical | temporal | relational
+    importance: str  # critical | moderate | minor
+    why_hidden: str
+    user_decision: NotRequired[str]  # confirmed | denied | modified
+    user_modification: NotRequired[str]
+
+
+class GhostModeState(TypedDict):
+    level: GhostLevel
+    disclosure: dict[str, str]
+    llm_override: NotRequired[str | None]
+
+
+class ChatMessage(TypedDict):
+    question: str
+    response: str
+    node: str
+    timestamp: str
 
 
 class GraphMetadata(TypedDict):
@@ -82,6 +110,8 @@ class GraphMetadata(TypedDict):
     completed_at: NotRequired[str]
     total_processing_time_ms: NotRequired[int]
     models_used: NotRequired[list[str]]
+    analysis_mode: NotRequired[AnalysisMode]
+    ghost_level: NotRequired[GhostLevel]
 
 
 class CouncilState(TypedDict):
@@ -94,3 +124,18 @@ class CouncilState(TypedDict):
     synthesis: NotRequired[SynthesisOutput]
     errors: NotRequired[list[str]]
     status: PipelineStatus
+    # Ghost Mode
+    ghost_mode: NotRequired[GhostModeState]
+    # Assumption Excavator
+    assumptions: NotRequired[list[Assumption]]
+    # Analysis mode overrides
+    analysis_mode: NotRequired[AnalysisMode]
+    mode_output: NotRequired[dict]  # Output from special modes
+    # Chat history
+    chat_history: NotRequired[list[ChatMessage]]
+    # R1 thinking steps
+    thinking_steps: NotRequired[list[dict]]
+    # Situation DNA
+    situation_dna: NotRequired[dict]
+    # Confidence breakdown
+    confidence_breakdown: NotRequired[dict[str, float]]

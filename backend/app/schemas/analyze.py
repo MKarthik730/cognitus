@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 class AnalyzeRequest(BaseModel):
     session_id: int
+    ghost_level: str = "off"
+    analysis_mode: str = "standard"
 
 
 class ExpertResponseSchema(BaseModel):

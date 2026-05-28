@@ -1,13 +1,13 @@
-from backend.app.models.base import Base
-from backend.app.models.user import User
-from backend.app.models.session import Session
-from backend.app.models.analysis import Analysis
-from backend.app.models.expert_response import ExpertResponse
-from backend.app.models.contradiction import Contradiction
-from backend.app.models.agreement import Agreement
-from backend.app.models.api_usage_log import ApiUsageLog
-from backend.app.models.case_study_node import CaseStudyNode
-from backend.app.models.case_study_context import CaseStudyContext
+from app.models.base import Base
+from app.models.user import User
+from app.models.session import Session
+from app.models.analysis import Analysis
+from app.models.expert_response import ExpertResponse
+from app.models.contradiction import Contradiction
+from app.models.agreement import Agreement
+from app.models.api_usage_log import ApiUsageLog
+from app.models.case_study_node import CaseStudyNode
+from app.models.case_study_context import CaseStudyContext
 
 __all__ = [
     "Base",

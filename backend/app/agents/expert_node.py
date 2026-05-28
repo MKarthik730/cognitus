@@ -4,15 +4,15 @@ import json
 import logging
 import time
 
-from backend.app.core.config import settings
-from backend.app.graph.state import ExpertOutput
-from backend.app.schemas.node_output import (
+from app.core.config import settings
+from app.graph.state import ExpertOutput
+from app.schemas.node_output import (
     NodeOutput,
     clean_json_response,
     confidence_to_level,
     is_hallucinated,
 )
-from backend.app.services.hf_service import HFService
+from app.services.hf_service import HFService
 
 logger = logging.getLogger(__name__)
 
