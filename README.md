@@ -1,346 +1,282 @@
-<div align="center">
-
 # Cognitus
 
-<img src="https://img.shields.io/badge/Python-3.12-blue?style=flat-square&logo=python&logoColor=white" />
-<img src="https://img.shields.io/badge/FastAPI-0.111-009688?style=flat-square&logo=fastapi&logoColor=white" />
-<img src="https://img.shields.io/badge/HuggingFace-Router-FFD21E?style=flat-square&logo=huggingface&logoColor=black" />
-<img src="https://img.shields.io/badge/LangGraph-Pipeline-6366f1?style=flat-square" />
-<img src="https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white" />
-<img src="https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql&logoColor=white" />
-<img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" />
+> Multi-perspective AI reasoning platform powered by HuggingFace LLMs — with full Case Study Mode.
 
-### Multi-perspective AI reasoning — at the speed of thought.
+Cognitus operates in two modes:
 
-Cognitus assembles a **council of expert AI agents** that analyze any situation from independent domain viewpoints simultaneously. They don't just summarize — they disagree, interrogate each other's assumptions, surface contradictions, and commit to a single actionable verdict. Every step of that reasoning streams live to an animated canvas graph so you can watch the council think.
+- **Standard Mode** — Type a question and get analysis from dynamically selected AI expert agents in real time.
+- **Case Study Mode** — Upload real case files (PDFs, images, documents), define custom expert nodes with tailored behaviors, and run a grounded multi-agent analysis on the uploaded content.
 
-Built for decisions that are too complex for one perspective and too important to get wrong.
+Everything streams to an animated canvas graph via WebSocket.
 
-</div>
+## Architecture
 
----
+![Cognitus Architecture](./architecture.svg)
 
-## The Problem It Solves
+## Pipeline
 
-Most AI tools give you one answer from one perspective. For simple questions, that's fine. But real decisions — *should we restructure this company, how do we handle this legal dispute, what's actually causing this patient's symptoms* — involve competing valid viewpoints, hidden tradeoffs, and assumptions that need to be challenged.
+![Cognitus Pipeline](./pipeline.svg)
 
-Cognitus approaches these problems the way a good advisory panel would: multiple independent experts analyze the same situation in parallel, then their findings are stress-tested against each other before a synthesis is reached. The result is not a summarized opinion — it is a reasoned verdict with an explicit confidence score, documented disagreements, and the chain of reasoning that produced it.
+### Pipeline Flow
 
----
+1. **Case Decomposer** — The Distributor breaks the situation into 3–5 specific, independent sub-questions, each assigned to a domain
+2. **Expert Nodes** — Each expert receives their *specific sub-question* plus the full situation as context, producing focused, non-overlapping analyses
+3. **Cross-Check** — Identifies contradictions and agreements between experts
+4. **Synthesis** — Forced commitment: picks ONE primary recommendation, no hedging
 
-## Modes
+### WebSocket Resilience
 
-| Mode | When to use it | How it works |
-|---|---|---|
-| **Standard** | Open-ended questions, strategic dilemmas, research topics | Type your question → Cognitus dynamically selects 3–5 domain experts best suited to the problem → parallel analysis → cross-examination → verdict |
-| **Case Study** | Real documents, evidence-based decisions, structured investigations | Upload your files (PDF, DOCX, images, CSVs) → define custom expert nodes with tailored personas and behaviors → grounded multi-agent analysis on the actual content |
-
-Both modes stream every pipeline step — node selection, expert responses, cross-check findings, synthesis — to an animated canvas graph in real time via WebSocket.
-
----
-
-## Agent Pipeline
-
-<img src="docs/pipeline.svg" width="100%" alt="Cognitus Agent Pipeline"/>
-
-### How the pipeline works
-
-**1. Distributor — Case Decomposer**
-
-The Distributor does not just label domains. It reads the full situation and breaks it into 3–5 *specific, focused sub-questions* — one per expert — that are meaningfully different from each other and directly answerable from the case context. For a corporate insolvency case it might produce: *"Is the proposed bailout sufficient given the monthly burn rate?"*, *"What does the Air India privatization precedent tell us about realistic timelines?"*, and *"What leverage does the union actually hold ahead of the Q3 deadline?"* — rather than generic domain labels like `["finance", "legal"]`.
-
-**2. Expert Nodes — Parallel Specialist Analysis**
-
-Each expert receives their specific sub-question plus the full situation as context. Experts are instructed to cite concrete numbers, take a clear position, and not hedge. Responses are validated as structured JSON against a strict Pydantic schema — if a response fails validation or triggers hallucination detection, the node retries once before being marked as an error and excluded. All expert nodes run in parallel; the pipeline does not wait for the slowest node before proceeding.
-
-**3. Cross-Check — Contradiction Analyst**
-
-The Cross-Check node receives every expert output and compares them pairwise. It identifies direct contradictions (where two experts reach opposing conclusions from the same evidence), partial contradictions (where experts agree on facts but disagree on interpretation), and complementary findings (where different angles reinforce each other). It computes a consensus score between 0.0 and 1.0. A score near 0.5 signals genuine expert disagreement — not a failure, but a signal that the synthesis must surface the tension rather than paper over it.
-
-**4. Synthesizer — Committed Verdict**
-
-The Synthesizer is explicitly instructed to pick one primary recommendation and commit to it. It receives the full expert outputs plus the cross-check analysis, reconciles disagreements, and states the conditions under which its verdict would change. It does not produce a list of equally weighted options. If the evidence is genuinely split, it says so — with the specific points of irresolvable disagreement documented.
-
----
-
-## System Architecture
-
-<img src="docs/architecture.svg" width="100%" alt="Cognitus System Architecture"/>
-
-### Architecture notes
-
-The frontend is intentionally framework-free — Vanilla JS with a Canvas API graph renderer, a reactive state store built on a `subscribe(key, fn)` pattern, and client-side document extraction via PDF.js and mammoth.js. This keeps the bundle small, eliminates hydration complexity, and means the canvas graph can be updated at 60fps without React reconciliation overhead.
-
-The backend is a FastAPI application running on Uvicorn with the full agent pipeline orchestrated by LangGraph's `StateGraph`. Each pipeline run is a directed acyclic graph of async nodes; expert nodes are executed as a parallel `asyncio.gather()` fan-out. Results are persisted to PostgreSQL via async SQLAlchemy, with Redis serving as the response cache, rate limiter, WebSocket event log, and task queue simultaneously.
-
-The HuggingFace Router client wraps all LLM calls with a three-model fallback chain and tenacity-based exponential backoff, so transient API failures are handled transparently without surfacing errors to the user.
-
----
-
-## WebSocket Event Flow
-
-<img src="docs/websocket.svg" width="100%" alt="Cognitus WebSocket Event Sequence"/>
-
-### Connection behavior
-
-The WebSocket connection is managed by a `CognitusSocket` class on the frontend that wraps the native WebSocket with automatic reconnection logic. On an unexpected close (any code other than 1000), it attempts reconnect with exponential backoff — 1s, 2s, 4s, 8s, 16s — up to five attempts. On reconnect, it sends a `resume` message with the session ID and the last received event ID; the backend replays any missed events from Redis (last 100 events per session, 10-minute TTL). After five failed attempts the UI surfaces a manual retry button.
-
-Every outbound server message carries an incrementing `event_id`. Partial node results are stored in Redis under `partial:{session_id}:{node_name}` so a reconnecting client can recover mid-analysis without restarting the full pipeline.
-
----
+- **Auto-reconnect** — Frontend retries with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts)
+- **Event History** — Last 100 events per session stored in Redis (10min TTL)
+- **Resume on Reconnect** — Missed events are replayed; partial node results recovered
+- **In-memory Rate Limiter** — Falls back when Redis is unavailable (single-process only)
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|---|---|---|
-| **LLM Provider** | HuggingFace Inference Router | Free-tier access to frontier models with automatic fallback across Mistral-7B → Zephyr-7B → Phi-3 |
-| **Backend** | Python 3.12, FastAPI, Uvicorn | Async-native, fast startup, excellent WebSocket support |
-| **Pipeline** | LangGraph StateGraph | Explicit DAG orchestration with typed state — makes the pipeline structure auditable and testable |
-| **Frontend** | Vanilla JS, Canvas API, Vite 5 | No framework overhead; full control over canvas rendering and animation |
-| **Document Extraction** | PDF.js + mammoth.js (browser) · PyMuPDF + python-docx (server) | Client-side extraction avoids upload round-trips for text documents; server-side handles images |
-| **Database** | PostgreSQL 16 via asyncpg + SQLAlchemy 2.0 | Async-native ORM, full analysis history, contradiction and agreement tables for audit trail |
-| **Cache / Queue** | Redis 7 | Single service for response cache, rate limiter, WebSocket event log, and async task queue |
-| **Auth** | JWT + bcrypt via python-jose + passlib | Stateless token auth with secure password hashing |
-| **LLM Resilience** | tenacity | Declarative retry with exponential backoff and model fallback on TimeoutException and RequestError |
-| **Containers** | Docker + Docker Compose | Single-command startup for all four services |
+| Layer | Technology |
+|-------|-----------|
+| LLM Provider | HuggingFace Inference API (Router) |
+| Backend | FastAPI + Uvicorn + WebSockets |
+| Frontend | Vanilla JS + Canvas API + Vite |
+| Document Extraction | PDF.js (browser), mammoth.js (browser), PyMuPDF (server), python-docx (server) |
+| Database | PostgreSQL 16 (async via asyncpg) |
+| ORM | SQLAlchemy 2.0 async |
+| Cache | Redis 7 |
+| Auth | JWT + bcrypt |
+| Container | Docker + Docker Compose |
 
----
+## Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- Docker & Docker Compose (optional, for postgres/redis)
+- HuggingFace API token ([get one free](https://huggingface.co/settings/tokens))
+
+## Quick Start
+
+```bash
+# Clone and enter
+git clone https://github.com/MKarthik730/cognitus.git
+cd cognitus
+git checkout case-study
+
+# Environment
+cp .env.example .env
+# Edit .env with your HF_API_TOKEN and a SECRET_KEY
+
+# Start everything with Docker
+docker compose up --build
+```
+
+### Manual Development Setup
+
+```bash
+# Backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r backend/requirements.txt
+pip install PyMuPDF python-docx   # for file extraction
+
+# Frontend
+cd frontend
+npm install
+cd ..
+
+# Start infrastructure (or set REDIS_URL / DATABASE_URL to skip)
+docker compose up -d postgres redis
+
+# Run backend (port 8000)
+uvicorn backend.main:app --reload --port 8000
+
+# Run frontend (separate terminal, port 5173)
+cd frontend && npm run dev
+```
+
+> **Note:** The backend starts without Redis/Postgres — it logs a warning and runs in standalone mode for WebSocket testing.
+
+## Case Study Mode — Feature Details
+
+### File Upload & Extraction
+
+Switch to the **Case Study** tab in the left panel to access the file drop zone.
+
+| File Type | Extraction Method |
+|-----------|------------------|
+| PDF | PDF.js in-browser, PyMuPDF on server |
+| DOCX | mammoth.js in-browser, python-docx on server |
+| PNG / JPG / WEBP | Base64 → HF Inference API for description |
+| MD / TXT / CSV | FileReader API as plain text |
+
+- Multiple files allowed
+- Per-file extraction status (spinner → ready/failed)
+- Failed files show retry button, excluded from analysis
+
+### Node Builder
+
+Define 2–6 custom expert nodes with:
+
+- **Name** — Displayed in graph and panels
+- **Role** — One-line description
+- **Behavior** — Full system prompt controlling reasoning style
+- **Color** — Pick from 8 preset colors per node
+- **Collapse / Expand** — Toggle to show only the name
+- **Duplicate** — Clone a node with "(copy)" suffix
+- **Reorder** — Via drag handle
+- **Delete** — Disabled when only 2 nodes remain
+
+### Preset Templates
+
+| Template | Nodes |
+|----------|-------|
+| Medical Team | Cardiologist, Intensivist, Pharmacologist, Risk Assessor |
+| Detective Squad | Evidence Analyst, Forensic Pathologist, Psychologist, Legal Advisor |
+| Startup Review | Investor, CFO, Market Analyst, Devil's Advocate |
+| Legal Panel | Prosecution, Defense Counsel, Forensic Expert, Judge |
+| Engineering Review | Backend Engineer, Security Analyst, DevOps Lead, QA Engineer |
+| Custom | Starts with 2 empty node slots |
+
+Each preset ships with detailed behavior prompts that control how the expert reasons.
+
+### Context Pipeline
+
+After extraction, before analysis:
+
+1. **Assemble** — Concatenate all ready file contents
+2. **Estimate** — If total > 6000 chars (~1500 tokens), run per-file summarization via HF model
+3. **Compress** — If still > 10000 chars, run global compression pass
+4. **Inject** — All nodes receive the same `CASE_CONTEXT` string
+
+> ℹ A banner appears when context was condensed: *"Case files condensed to fit analysis limits."*
+
+### Node Execution
+
+All nodes run in parallel. Each receives:
+- Their **behavior** system prompt
+- The **case context**
+- Their **specific sub-question** (from the case decomposer)
+- The **guiding question** (optional)
+
+Each response is parsed as **structured JSON** matching a Pydantic `NodeOutput` schema (`confidence`, `position`, `reasoning`, `key_findings`, `concerns`). Responses with markdown fences are auto-cleaned, validated, and hallucination-checked before acceptance.
+
+On JSON parse failure, the node is re-prompted once. If both attempts fail, the node is marked as error and excluded from synthesis.
+
+### Output
+
+**Verdict tab:** Verdict card with confidence pill · Consensus meter (0–100% gradient) · Critical Findings · Unresolved Disagreements · Numbered Recommendations · Full Reasoning block
+
+**Node Outputs tab:** One card per node with colored left border · Position · Key Findings · Concerns · Reasoning (collapsible) · Cross-Check card at bottom
+
+## Standard Mode — Case Decomposition + Expert Analysis
+
+In Standard mode, the **Distributor** (case decomposer) breaks the situation into 3–5 specific analytical sub-questions, each assigned to a domain. Then the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the situation and selects 3–5 relevant expert roles on the fly. Each expert receives their *specific sub-question* plus the full situation as context.
+
+Responses are parsed as **structured JSON** (Pydantic `NodeOutput` schema). On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
+
+Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
+
+## WebSocket Resilience
+
+The frontend includes automatic reconnection with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts). If the WebSocket disconnects mid-analysis:
+
+1. The frontend tracks the last received event ID
+2. On reconnect, it sends a `resume` message with the session ID and last event ID
+3. The backend replays missed events from Redis (last 100 events, 10min TTL)
+4. Partial node results are recovered for nodes that hadn't completed yet
+5. After 5 failed attempts, the UI shows "Connection lost — Click Retry"
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login, get JWT |
+| GET | `/api/sessions` | List user sessions |
+| POST | `/api/sessions` | Create session |
+| GET | `/api/sessions/{id}` | Get session |
+| DELETE | `/api/sessions/{id}` | Delete session |
+| POST | `/api/analyze` | Run council analysis |
+| GET | `/api/analyze/{id}` | Get completed analysis |
+| WS | `/ws/{session_id}` | Real-time streaming graph events |
+| POST | `/api/case-study/upload` | Upload file for case study extraction |
+| GET | `/api/nodes` | List available expert domains |
+| GET | `/health` | Health check |
 
 ## Project Structure
 
 ```
 cognitus/
 ├── backend/
-│   ├── main.py                        # FastAPI app entry — lifespan, CORS, router mounts
+│   ├── app/
+│   │   ├── agents/              # LLM-powered agent nodes
+│   │   │   ├── distributor.py
+│   │   │   ├── expert_node.py
+│   │   │   ├── cross_check.py
+│   │   │   └── synthesizer.py
+│   │   ├── graph/               # LangGraph state machine
+│   │   │   ├── state.py
+│   │   │   └── council_graph.py
+│   │   ├── api/                 # FastAPI routes + WebSocket
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── sessions.py
+│   │   │   │   └── analyze.py
+│   │   │   ├── upload.py        # Case study file upload
+│   │   │   └── websocket.py     # Standard + case study WS handlers
+│   │   ├── core/                # Config, DB, security
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   └── security.py
+│   │   ├── services/            # HF API, node selector, etc.
+│   │   │   ├── hf_service.py
+│   │   │   ├── node_selector.py
+│   │   │   ├── rate_limiter.py
+│   │   │   ├── cache.py
+│   │   │   └── queue_worker.py
+│   │   ├── models/              # SQLAlchemy ORM models (7 tables)
+│   │   └── schemas/             # Pydantic request/response schemas (NodeOutput, etc.)
+│   │   └── node_output.py
+│   └── __init__.py
+│   ├── main.py
 │   ├── requirements.txt
-│   └── app/
-│       ├── agents/
-│       │   ├── distributor.py         # Case decomposer: situation → focused sub-questions per expert
-│       │   ├── expert_node.py         # JSON-mode expert with Pydantic validation + hallucination detection
-│       │   ├── cross_check.py         # Pairwise contradiction + agreement analysis, consensus scoring
-│       │   └── synthesizer.py         # Final verdict — forced single recommendation, no hedging
-│       ├── api/
-│       │   ├── routes/
-│       │   │   ├── auth.py            # POST /api/auth/register  POST /api/auth/login
-│       │   │   ├── sessions.py        # CRUD for analysis sessions (paginated list, get, delete)
-│       │   │   └── analyze.py         # POST /api/analyze  GET /api/analyze/{id}
-│       │   ├── upload.py              # POST /api/case-study/upload — server-side image extraction
-│       │   └── websocket.py           # WS /ws/{session_id} — Standard + Case Study streaming
-│       ├── core/
-│       │   ├── config.py              # Pydantic Settings — HF, DB, Redis, JWT, rate limits
-│       │   ├── database.py            # Async SQLAlchemy engine + session factory
-│       │   └── security.py           # JWT creation/verification, bcrypt password hashing
-│       ├── graph/
-│       │   ├── state.py               # TypedDicts for all pipeline states
-│       │   └── council_graph.py       # LangGraph StateGraph: distributor → experts → cross-check → synthesizer
-│       ├── models/                    # SQLAlchemy ORM models (7 tables)
-│       │   ├── user.py · session.py · analysis.py · expert_response.py
-│       │   ├── contradiction.py · agreement.py · api_usage_log.py
-│       │   └── base.py
-│       ├── schemas/
-│       │   ├── node_output.py         # NodeOutput · CrossExamineOutput · SynthesisResult · DistributorResult
-│       │   ├── auth.py · sessions.py · analyze.py
-│       └── services/
-│           ├── hf_service.py          # HF Router client — retry, fallback chain, image analysis, summarization
-│           ├── node_selector.py       # LLM-powered dynamic node selection for Standard Mode
-│           ├── rate_limiter.py        # Redis token bucket: burst / hourly / daily tiers
-│           ├── cache.py               # SHA256-keyed Redis response cache (24h TTL)
-│           └── queue_worker.py        # Redis BLPOP task queue — graceful shutdown, pub/sub result delivery
-│
-└── frontend/
-    └── src/
-        ├── app.js                     # Main application logic, event handlers, file extraction pipeline
-        ├── store.js                   # Reactive state store — subscribe(key, fn), WS event → state mapping
-        ├── canvas.js                  # Canvas graph renderer: nodes, animated edges, minimap, zoom/pan
-        ├── api.js                     # CognitusSocket WS client + exponential backoff + HTTP client
-        ├── utils.js                   # Markdown renderer, domain colors, preset templates, file icons
-        └── styles.css                 # Complete dark theme — no CSS framework
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── app.js               # Main application logic
+│   │   ├── store.js             # Reactive state store
+│   │   ├── canvas.js            # Canvas graph rendering
+│   │   ├── api.js               # WebSocket + HTTP client
+│   │   ├── utils.js             # Helpers, colors, markdown, presets
+│   │   ├── main.js              # Entry point
+│   │   └── styles.css           # All styles (no CSS framework)
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.ts
+├── architecture.svg
+├── pipeline.svg
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
 
-## Database Schema
+## Dynamic Node Selection
 
-Seven tables with full indexing and foreign key relationships:
+Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
 
-```
-users
-  id · username · email · hashed_password · is_active · created_at · updated_at
+1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
+2. Response is parsed as structured JSON
+3. Each selected node gets an auto-generated role description and behavior prompt
+4. Nodes appear in the left panel with a staggered fade-in animation
+5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
 
-sessions
-  id · user_id → users · title · situation (text) · status · created_at · updated_at
+Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
+## Rate Limits
 
-analyses
-  id · session_id → sessions · distributor_output (JSON) · cross_check_output (JSON)
-     · synthesis_output (JSON) · consensus_score (float) · status · completed_at
+HuggingFace free tier limits enforced by the platform:
+- 800 requests/day global
+- 50 requests/hour per user
+- 1 request per 2 seconds burst
 
-expert_responses
-  id · analysis_id → analyses · domain · analysis_text · confidence (int)
-     · model_used · processing_time_ms · created_at
+## License
 
-contradictions
-  id · analysis_id → analyses · domain_a · domain_b · type · description · severity
-
-agreements
-  id · analysis_id → analyses · domain_a · domain_b · points (JSON)
-
-api_usage_log
-  id · user_id → users · endpoint · model_used · tokens_used · ip_address · created_at
-```
-
----
-
-## API Reference
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/register` | — | Register new user (username, email, password) |
-| `POST` | `/api/auth/login` | — | Login and receive JWT access token |
-| `GET` | `/api/sessions/` | JWT | List user's sessions with pagination |
-| `POST` | `/api/sessions/` | JWT | Create a new analysis session |
-| `GET` | `/api/sessions/{id}` | JWT | Get session details |
-| `DELETE` | `/api/sessions/{id}` | JWT | Delete a session |
-| `POST` | `/api/analyze/` | JWT | Run full council analysis (REST) |
-| `GET` | `/api/analyze/{id}` | JWT | Retrieve completed analysis with all expert responses |
-| `WS` | `/ws/{session_id}` | — | Real-time streaming — Standard and Case Study modes |
-| `POST` | `/api/case-study/upload` | — | Server-side file extraction for images |
-| `GET` | `/api/nodes` | — | List available expert domains |
-| `GET` | `/health` | — | Health check |
-
----
-
-## File Extraction
-
-Cognitus extracts text from uploaded documents client-side wherever possible to avoid unnecessary upload latency. Only image files require a server round-trip for AI-powered analysis.
-
-| File Type | Where | Library / Method |
-|---|---|---|
-| PDF (digital, selectable text) | Browser | PDF.js — iterates pages, extracts text layer content items |
-| DOCX | Browser | mammoth.js — converts Word XML to clean plain text |
-| PNG / JPG / WEBP | Server | HuggingFace API — base64-encoded image sent for visual analysis |
-| TXT / MD / CSV | Browser | FileReader.readAsText() — direct string read |
-
-Documents exceeding 6,000 characters are automatically summarized by the LLM before being passed to expert nodes, with a second global compression pass if combined context still exceeds 10,000 characters. A *"Case files condensed"* banner is shown in the UI when compression occurs.
-
-> **Note on scanned PDFs:** PDF.js extracts text layers only. A scanned PDF (a photograph of a document) contains no text layer and will extract as empty. OCR support via Tesseract is not yet implemented — digital PDFs work fully.
-
----
-
-## Hallucination Detection
-
-Every expert node response passes through `is_hallucinated()` before being accepted. The function checks for patterns indicating the model produced filler content rather than a real analysis. On detection, the node retries its prompt once. If the second attempt also triggers detection, the node is marked `error` and excluded from cross-check and synthesis entirely.
-
-| Pattern checked | Reason |
-|---|---|
-| `placeholder`, `lorem ipsum` | Template filler — model did not fill in the content |
-| `n/a`, `not available`, `not applicable` | Model acknowledged missing data rather than reasoning from available context |
-| `to be determined`, `tbd` | Incomplete response |
-| `…`, `[...]` | Ellipsis placeholder — truncated or unfinished output |
-| Reasoning field under 50 characters | Too brief to represent genuine analytical reasoning |
-
----
-
-## Rate Limiting
-
-All limits are enforced by a Redis-backed token bucket and are fully configurable via environment variables. The burst limit prevents hammering during a single session; the hourly and daily limits protect the shared HuggingFace free-tier quota.
-
-| Tier | Default limit | Scope |
-|---|---|---|
-| Burst | 1 request per 2 seconds | Per user |
-| Hourly | 50 requests per hour | Per user |
-| Daily | 800 requests per day | Global |
-
----
-
-## Quick Start
-
-### Docker (recommended)
-
-```bash
-git clone https://github.com/MKarthik730/cognitus.git
-cd cognitus
-
-cp .env.example .env
-# Open .env and set HF_API_TOKEN and SECRET_KEY
-
-docker compose up --build
-```
-
-All four services start together:
-
-| Service | Address |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:8000 |
-| PostgreSQL | localhost:5432 |
-| Redis | localhost:6379 |
-
-The frontend Docker build runs `npm install` at container start — first boot takes a moment while dependencies download.
-
-### Manual Development
-
-```bash
-# Backend — create virtualenv and install dependencies
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
-
-# Frontend — install Node dependencies
-cd frontend && npm install && cd ..
-
-# Start only the infrastructure services
-docker compose up -d postgres redis
-
-# Run the backend (port 8000)
-uvicorn backend.main:app --reload --port 8000
-
-# Run the frontend dev server (separate terminal, port 5173)
-cd frontend && npm run dev
-```
-
-The backend starts and runs in standalone mode even without Redis and PostgreSQL — it logs a warning and the WebSocket analysis pipeline still functions, but session persistence and rate limiting are unavailable.
-
-### Test the WebSocket
-
-A standalone test script is included for validating the full pipeline without the UI:
-
-```bash
-pip install websockets
-python test_ws_dynamic_nodes.py
-```
-
-The script connects via WebSocket, submits a medical chest pain scenario, logs every event with a timestamp and elapsed time, and prints a final summary with event counts and total pipeline duration.
-
----
-
-## Configuration
-
-All configuration is via the `.env` file. Copy `.env.example` and fill in your values:
-
-```env
-# HuggingFace — get your token at huggingface.co/settings/tokens
-HF_API_TOKEN=hf_your_token_here
-HF_PRIMARY_MODEL=mistralai/Mistral-7B-Instruct-v0.3
-HF_FALLBACK_1=HuggingFaceH4/zephyr-7b-beta
-HF_FALLBACK_2=microsoft/Phi-3-mini-4k-instruct
-HF_MAX_NEW_TOKENS=512
-HF_TIMEOUT=30
-
-# Rate limits (requests)
-HF_DAILY_LIMIT=800
-HF_HOURLY_LIMIT=50
-
-# Backend
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/cortex
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=replace-with-a-long-random-string
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
-
----
-
-<div align="center">
-
-Built by <a href="https://github.com/MKarthik730">MKarthik730</a> · MIT License
-
-</div>
+MIT

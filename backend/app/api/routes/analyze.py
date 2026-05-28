@@ -5,31 +5,34 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
-from backend.app.core.security import get_current_user
-from backend.app.models.agreement import Agreement
-from backend.app.models.analysis import Analysis
-from backend.app.models.contradiction import Contradiction
-from backend.app.models.expert_response import ExpertResponse
-from backend.app.models.session import Session
-from backend.app.models.user import User
-from backend.app.schemas.analyze import (
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models.agreement import Agreement
+from app.models.analysis import Analysis
+from app.models.contradiction import Contradiction
+from app.models.expert_response import ExpertResponse
+from app.models.session import Session
+from app.models.user import User
+from app.schemas.analyze import (
     AgreementSchema,
     AnalyzeRequest,
     AnalysisResponse,
     ContradictionSchema,
     ExpertResponseSchema,
 )
-from backend.app.services.hf_service import HFService
-from backend.app.services.rate_limiter import RateLimiter
-from backend.app.graph.council_graph import CouncilGraph
-from backend.app.core.config import settings
+from app.services.hf_service import HFService
+from app.services.llm_router import get_llm_router
+from app.services.ghost_mode import GhostModeManager
+from app.services.rate_limiter import RateLimiter
+from app.graph.council_graph import CouncilGraph
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/analyze", tags=["analyze"])
 
 hf_service = HFService()
 rate_limiter = RateLimiter.__new__(RateLimiter)
 council_graph = CouncilGraph(hf_service)
+ghost_mgr = GhostModeManager()
 
 
 @router.post("/", response_model=AnalysisResponse)
@@ -38,6 +41,14 @@ async def analyze(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AnalysisResponse:
+    # LLM Router health check
+    router = get_llm_router()
+    errors = router.validate_config()
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM configuration error: {'; '.join(errors)}",
+        )
     result = await db.execute(
         select(Session).where(
             Session.id == body.session_id, Session.user_id == current_user.id
@@ -49,6 +60,28 @@ async def analyze(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found",
         )
+
+    # Check Ghost Mode
+    ghost_level = body.ghost_level or "off"
+    can_proceed, restriction = await ghost_mgr.can_analyze(ghost_level)
+    if not can_proceed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=restriction,
+        )
+
+    # Ghost mode: skip persistence for Shadow, Void, Phantom
+    skip_persistence = ghost_level in ("shadow", "void", "phantom")
+
+    if skip_persistence:
+        analysis_id = 0
+        council_result = await council_graph.run(
+            situation=session.situation,
+            session_id=str(session.id),
+            user_id=current_user.id,
+            analysis_mode=body.analysis_mode or "standard",
+        )
+        return await _build_ghost_response(council_result)
 
     analysis = Analysis(
         session_id=session.id,
@@ -63,6 +96,7 @@ async def analyze(
             situation=session.situation,
             session_id=str(session.id),
             user_id=current_user.id,
+            analysis_mode=body.analysis_mode or "standard",
         )
 
         distributor_json = json.dumps(
@@ -150,6 +184,56 @@ async def analyze(
         )
 
     return await _build_analysis_response(analysis, db)
+
+
+async def _build_ghost_response(council_result: dict) -> AnalysisResponse:
+    """Build a response for ghost mode analyses (no persistence)."""
+    import uuid
+    now = datetime.now(timezone.utc)
+    synthesis = council_result.get("synthesis", {})
+    cross_check = council_result.get("cross_check", {})
+    experts = council_result.get("experts", {})
+
+    return AnalysisResponse(
+        id=0,
+        session_id=0,
+        distributor_output=json.dumps(council_result.get("distributor", {})),
+        cross_check_output=json.dumps(cross_check),
+        synthesis_output=json.dumps(synthesis),
+        consensus_score=synthesis.get("consensus_score", 0.5),
+        status="completed",
+        completed_at=now,
+        expert_responses=[
+            ExpertResponseSchema(
+                domain=d,
+                analysis_text=e.get("analysis", ""),
+                confidence=e.get("confidence", "medium"),
+                model_used=e.get("model_used", ""),
+                processing_time_ms=e.get("processing_time_ms", 0),
+            )
+            for d, e in experts.items()
+        ],
+        contradictions=[
+            ContradictionSchema(
+                domain_a=c["between"][0],
+                domain_b=c["between"][1],
+                type=c["type"],
+                description=c["description"],
+                severity=c["severity"],
+            )
+            for c in cross_check.get("contradictions", [])
+        ],
+        agreements=[
+            AgreementSchema(
+                domain_a=a["between"][0],
+                domain_b=a["between"][1],
+                points=a.get("points", []),
+            )
+            for a in cross_check.get("agreements", [])
+        ],
+        created_at=now,
+        updated_at=now,
+    )
 
 
 @router.get("/{analysis_id}", response_model=AnalysisResponse)

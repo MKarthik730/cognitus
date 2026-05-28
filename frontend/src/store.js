@@ -24,6 +24,38 @@ let state = {
   reconnectAttempts: 0,
   isReconnecting: false,
 
+  // Ghost Mode
+  ghostLevel: 'off',
+  ghostTimer: null,
+  ghostDisclosure: null,
+  piiRedactions: [],
+
+  // Chat (post-analysis conversation)
+  chatMessages: [],
+  chatInput: '',
+  chatActiveNode: null,
+  chatStreaming: false,
+  chatVisible: false,
+
+  // Analysis mode
+  analysisMode: 'standard',
+  modeOutput: null,
+
+  // Assumptions
+  assumptions: [],
+
+  // Intelligence Layer
+  minorityReport: null,
+  whatWouldChangeMyMind: [],
+  confidenceBreakdown: null,
+  situationDna: null,
+  thinkingSteps: [],
+
+  // Onboarding
+  onboardingStep: null, // null | 'mode' | 'key' | 'template' | 'complete'
+  onboardingMode: null,
+
+  // Legacy case study
   caseStudy: {
     files: [],
     nodes: [],
@@ -309,6 +341,72 @@ export function handleWsEvent(event) {
         s.consensusScore = event.consensus_score ?? event.data?.consensus_score ?? 0.5;
         s.contradictions = event.contradictions ?? event.data?.contradictions ?? [];
         s.agreements = event.agreements ?? event.data?.agreements ?? [];
+      }
+      break;
+
+    case 'ghost_disclosure':
+      s.ghostDisclosure = event.disclosure || null;
+      break;
+
+    case 'ghost_timer':
+      s.ghostTimer = event.message || null;
+      break;
+
+    case 'pii_redactions':
+      s.piiRedactions = event.redactions || [];
+      break;
+
+    case 'assumptions':
+      s.assumptions = event.assumptions || [];
+      break;
+
+    case 'thinking_step':
+      if (event.node && event.content) {
+        s.thinkingSteps = [...s.thinkingSteps, {
+          node: event.node,
+          step: event.step || 'reasoning',
+          content: event.content,
+        }];
+      }
+      break;
+
+    case 'chat_routing':
+      s.chatActiveNode = event.node || null;
+      if (event.persona) {
+        s.chatMessages = [...s.chatMessages, {
+          type: 'system',
+          node: event.node,
+          text: `Routing to ${event.node}...`,
+        }];
+      }
+      break;
+
+    case 'chat_token':
+      s.chatStreaming = true;
+      break;
+
+    case 'chat_complete':
+      s.chatStreaming = false;
+      s.chatMessages = [...s.chatMessages, {
+        type: 'node',
+        node: event.node || 'synthesizer',
+        text: event.content || '',
+      }];
+      break;
+
+    case 'stress_test_complete':
+      if (event.data) {
+        s.synthesis = {
+          ...(s.synthesis || {}),
+          stressTest: event.data,
+        };
+      }
+      break;
+
+    case 'mode_output':
+      if (event.data) {
+        s.modeOutput = event.data;
+        s.status = 'completed';
       }
       break;
 

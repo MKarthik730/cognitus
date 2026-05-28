@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.models.base import Base, TimestampMixin
+from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from backend.app.models.agreement import Agreement
-    from backend.app.models.contradiction import Contradiction
-    from backend.app.models.expert_response import ExpertResponse
-    from backend.app.models.session import Session
+    from app.models.agreement import Agreement
+    from app.models.contradiction import Contradiction
+    from app.models.expert_response import ExpertResponse
+    from app.models.session import Session
 
 
 class Analysis(Base, TimestampMixin):

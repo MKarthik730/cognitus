@@ -356,6 +356,254 @@ export function fitView() {
   offsetY = 0;
 }
 
+/**
+ * Draw a thinking step node (R1 reasoning) with dashed border and lighter color.
+ */
+function drawThinkingNode(ctx, node) {
+  const color = node.color || resolveColor('--accent');
+  const alpha = 0.6;
+
+  ctx.save();
+
+  // Dashed border for thinking nodes
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = hexToRgba(color, 0.06);
+  roundRect(ctx, node.x, node.y, NODE_W, NODE_H + 16, NODE_R);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+  // Label
+  ctx.fillStyle = hexToRgba('#e2e4eb', 0.7);
+  ctx.font = '400 10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  // Thinking icon
+  ctx.fillStyle = hexToRgba(color, 0.7);
+  ctx.font = '12px sans-serif';
+  ctx.fillText('\u24d8', node.x + 10, node.y + NODE_H / 2 + 8);
+
+  ctx.fillStyle = hexToRgba('#e2e4eb', 0.6);
+  ctx.font = '400 10px "DM Sans", sans-serif';
+  const label = (node.label || 'Reasoning').substring(0, 20);
+  ctx.fillText(label, node.x + 28, node.y + NODE_H / 2 + 8);
+
+  ctx.restore();
+}
+
+/**
+ * Draw a chat bubble node near the responding node.
+ */
+function drawChatBubble(ctx, sourceNode, chatText) {
+  if (!sourceNode || !chatText) return;
+
+  const bubbleW = 200;
+  const bubbleH = 60;
+  const bubbleX = sourceNode.x + NODE_W + 20;
+  const bubbleY = sourceNode.y;
+
+  ctx.save();
+
+  // Bubble background
+  ctx.fillStyle = hexToRgba('#1e2030', 0.95);
+  ctx.strokeStyle = sourceNode.color || resolveColor('--accent');
+  ctx.lineWidth = 1;
+  roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  // Connection line from node to bubble
+  ctx.beginPath();
+  ctx.moveTo(sourceNode.x + NODE_W, sourceNode.y + NODE_H / 2);
+  ctx.lineTo(bubbleX, bubbleY + bubbleH / 2);
+  ctx.strokeStyle = hexToRgba(sourceNode.color || resolveColor('--accent'), 0.3);
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Text
+  ctx.fillStyle = '#a0a3b1';
+  ctx.font = '400 10px "DM Sans", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  const lines = wordWrap(chatText, 180, ctx);
+  lines.slice(0, 4).forEach((line, i) => {
+    ctx.fillText(line, bubbleX + 10, bubbleY + 10 + i * 14);
+  });
+
+  ctx.restore();
+}
+
+function wordWrap(text, maxWidth, ctx) {
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = words[0] || '';
+
+  for (let i = 1; i < words.length; i++) {
+    const testLine = currentLine + ' ' + words[i];
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && i > 0) {
+      lines.push(currentLine);
+      currentLine = words[i];
+    } else {
+      currentLine = testLine;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
+/**
+ * Draw a cascade tree node with expandable branches.
+ */
+function drawCascadeNode(ctx, node, level, index) {
+  const colors = {
+    0: '#6c8cff',  // Immediate
+    1: '#fbbf24',  // 2nd Order
+    2: '#f87171',  // 3rd Order
+    3: '#a07abb',  // Unexpected
+    4: '#34d399',  // Irreversible
+  };
+  const color = colors[level] || colors[0];
+
+  ctx.save();
+
+  // Tree node (smaller than regular nodes)
+  const tnW = 140;
+  const tnH = 36;
+  const tnR = 6;
+
+  ctx.fillStyle = hexToRgba(color, 0.12);
+  ctx.strokeStyle = hexToRgba(color, 0.5);
+  ctx.lineWidth = 1;
+  roundRect(ctx, node.x, node.y, tnW, tnH, tnR);
+  ctx.fill();
+  ctx.stroke();
+
+  // Level icon
+  ctx.fillStyle = color;
+  ctx.font = '10px sans-serif';
+  const icons = ['\u2460', '\u2461', '\u2462', '\u2606', '\u2716'];
+  ctx.fillText(icons[level] || '\u2460', node.x + 10, node.y + tnH / 2 + 4);
+
+  // Label
+  ctx.fillStyle = '#e2e4eb';
+  ctx.font = '400 10px "DM Sans", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const label = (node.label || '').substring(0, 18);
+  ctx.fillText(label, node.x + 28, node.y + tnH / 2);
+
+  ctx.restore();
+}
+
+/**
+ * Render the full cascade tree layout.
+ */
+export function renderCascadeTree(state) {
+  if (!state.modeOutput || state.analysisMode !== 'cascade_mapper') return;
+
+  const levels = state.modeOutput.levels || {};
+  const canvas = document.getElementById('main-canvas');
+  if (!canvas) return;
+
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const bgColor = resolveColor('--bg-primary');
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, rect.width, rect.height);
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  const cx = rect.width / 2;
+  const levelLabels = ['Immediate', '2nd Order', '3rd Order', 'Unexpected', 'Irreversible'];
+  const levelKeys = ['immediate', 'second_order', 'third_order', 'unexpected', 'irreversible'];
+
+  levelKeys.forEach((key, levelIdx) => {
+    const items = levels[key] || [];
+    const y = 30 + levelIdx * 80;
+    const count = Math.min(items.length, 5);
+
+    items.slice(0, 5).forEach((item, i) => {
+      const x = cx + (i - (count - 1) / 2) * 150;
+      drawCascadeNode(ctx, {
+        x: x - 70,
+        y: y,
+        label: item.consequence || item.trigger || item.scenario || '',
+      }, levelIdx, i);
+
+      // Draw connecting line down
+      if (levelIdx < 4) {
+        ctx.beginPath();
+        ctx.moveTo(x, y + 36);
+        ctx.lineTo(x, y + 80);
+        ctx.strokeStyle = 'var(--border-strong)';
+        ctx.lineWidth = 0.5;
+        ctx.globalAlpha = 0.3;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    });
+
+    // Level label
+    ctx.fillStyle = '#6b6f7e';
+    ctx.font = '400 9px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(levelLabels[levelIdx], 80, y + 18);
+  });
+
+  ctx.restore();
+  renderMinimap(state, rect.width, rect.height);
+}
+
+/**
+ * Show the chat panel overlay on the canvas.
+ */
+export function showChatPanel() {
+  const panel = document.getElementById('chat-panel');
+  if (panel) {
+    panel.classList.remove('hidden');
+    panel.classList.add('visible');
+  }
+}
+
+/**
+ * Hide the chat panel overlay.
+ */
+export function hideChatPanel() {
+  const panel = document.getElementById('chat-panel');
+  if (panel) {
+    panel.classList.remove('visible');
+    panel.classList.add('hidden');
+  }
+}
+
+/**
+ * Clear the chat panel messages.
+ */
+export function clearChatPanel() {
+  const messages = document.getElementById('chat-messages');
+  if (messages) {
+    messages.innerHTML = '';
+  }
+}
+
 export function initCanvas() {
   const canvas = document.getElementById('main-canvas');
   if (!canvas) return;

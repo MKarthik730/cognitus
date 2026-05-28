@@ -216,6 +216,60 @@ export function disconnect() {
   setConnectionStatus(CONNECTION_STATES.DISCONNECTED);
 }
 
+/**
+ * Send a chat message via the existing WebSocket connection.
+ */
+export function sendChatMessage(text, analysisContext) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('Cannot send chat message: WebSocket not connected');
+    return false;
+  }
+
+  ws.send(JSON.stringify({
+    type: 'chat_message',
+    content: text,
+    analysis_context: analysisContext || {},
+    session_id: currentSessionId,
+  }));
+  return true;
+}
+
+/**
+ * Send a stress test request via WebSocket.
+ */
+export function sendStressTest(situation, verdict, reasoning) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('Cannot send stress test: WebSocket not connected');
+    return false;
+  }
+
+  ws.send(JSON.stringify({
+    type: 'stress_test',
+    situation,
+    verdict,
+    reasoning,
+    session_id: currentSessionId,
+  }));
+  return true;
+}
+
+/**
+ * Connect with analysis mode and ghost level.
+ */
+export function connectWithOptions(situation, sessionId, userId, options = {}) {
+  isIntentionalClose = false;
+  pendingRequest = {
+    situation,
+    user_id: userId,
+    analysis_mode: options.analysisMode || 'standard',
+    ghost_level: options.ghostLevel || 'off',
+  };
+  currentSessionId = sessionId;
+  lastEventId = 0;
+  reconnectAttempts = 0;
+  createWebSocket();
+}
+
 export async function createSession(title, situation) {
   const token = localStorage.getItem('token');
   const res = await fetch(`${API_BASE}/sessions/`, {

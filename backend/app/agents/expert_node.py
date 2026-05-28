@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
-from backend.app.core.config import settings
-from backend.app.graph.state import ExpertOutput
-from backend.app.schemas.node_output import (
+from app.core.config import settings
+from app.graph.state import ExpertOutput
+from app.schemas.node_output import (
     NodeOutput,
     clean_json_response,
     confidence_to_level,
     is_hallucinated,
 )
-from backend.app.services.hf_service import HFService
+from app.services.hf_service import HFService
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +122,10 @@ class ExpertNode:
         self, situation: str, sub_question: str | None = None, sub_question_id: str | None = None
     ) -> ExpertOutput:
         user_prompt = self._build_user_prompt(situation, sub_question)
+        start = time.monotonic()
         node_output, model = await self._generate_node_output(user_prompt)
-        return self._to_expert_output(node_output, model, sub_question, sub_question_id)
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        return self._to_expert_output(node_output, model, elapsed_ms, sub_question, sub_question_id)
 
     def _build_user_prompt(self, situation: str, sub_question: str | None) -> str:
         if sub_question:
@@ -133,7 +136,7 @@ class ExpertNode:
         return situation
 
     async def _generate_node_output(
-        self, user_prompt: str, is_retry: bool = False
+        self, situation: str, is_retry: bool = False
     ) -> tuple[NodeOutput | None, str]:
         """Generate and validate structured node output from the LLM.
 
@@ -146,7 +149,7 @@ class ExpertNode:
 
         response, model = await self.hf_service.generate(
             system,
-            user_prompt,
+            situation,
             max_tokens=settings.HF_EXPERT_MAX_TOKENS,
         )
 
@@ -159,7 +162,7 @@ class ExpertNode:
                     self.domain,
                     response,
                 )
-                return await self._generate_node_output(user_prompt, is_retry=True)
+                return await self._generate_node_output(situation, is_retry=True)
             logger.error(
                 "Expert %s: JSON parse failed after retry. Marking as error.",
                 self.domain,
@@ -173,7 +176,7 @@ class ExpertNode:
                     "Expert %s: Hallucination detected, retrying once.",
                     self.domain,
                 )
-                return await self._generate_node_output(user_prompt, is_retry=True)
+                return await self._generate_node_output(situation, is_retry=True)
             logger.error(
                 "Expert %s: Hallucination detected after retry. Marking as error.",
                 self.domain,
@@ -199,6 +202,7 @@ class ExpertNode:
         self,
         node_output: NodeOutput | None,
         model: str,
+        elapsed_ms: int = 0,
         sub_question: str | None = None,
         sub_question_id: str | None = None,
     ) -> ExpertOutput:
@@ -213,7 +217,7 @@ class ExpertNode:
                 analysis="",
                 confidence="low",
                 model_used=model,
-                processing_time_ms=0,
+                processing_time_ms=elapsed_ms,
             )
 
         # Build a readable summary from structured fields for backward compat
@@ -239,7 +243,7 @@ class ExpertNode:
             key_findings=node_output.key_findings,
             concerns=node_output.concerns,
             model_used=model,
-            processing_time_ms=0,
+            processing_time_ms=elapsed_ms,
         )
         if sub_question:
             result["sub_question"] = sub_question

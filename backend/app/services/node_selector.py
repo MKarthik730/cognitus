@@ -4,9 +4,9 @@ import json
 import logging
 from typing import Any
 
-from backend.app.core.config import settings
-from backend.app.schemas.node_output import clean_json_response
-from backend.app.services.hf_service import HFService
+from app.core.config import settings
+from app.schemas.node_output import clean_json_response
+from app.services.hf_service import HFService
 
 logger = logging.getLogger(__name__)
 

@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
-from backend.app.core.security import get_current_user
-from backend.app.models.session import Session
-from backend.app.models.user import User
-from backend.app.schemas.sessions import (
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models.session import Session
+from app.models.user import User
+from app.schemas.sessions import (
     SessionCreate,
     SessionListResponse,
     SessionResponse,

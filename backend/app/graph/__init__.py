@@ -1,4 +1,4 @@
-from backend.app.graph.state import (
+from app.graph.state import (
     Agreement,
     ConfidenceLevel,
     Contradiction,
@@ -12,7 +12,7 @@ from backend.app.graph.state import (
     PipelineStatus,
     SynthesisOutput,
 )
-from backend.app.graph.council_graph import CouncilGraph
+from app.graph.council_graph import CouncilGraph
 
 __all__ = [
     "Agreement",

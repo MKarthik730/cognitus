@@ -59,7 +59,7 @@ class CrossCheckResult(BaseModel):
 
 
 class SynthesisResult(BaseModel):
-    """Structured output from the synthesizer node."""
+    """Structured output from the synthesizer node with Intelligence Layer fields."""
 
     verdict: str = Field(min_length=1, description="The final verdict")
     reasoning: str = Field(min_length=1, description="Synthesis reasoning")
@@ -78,6 +78,23 @@ class SynthesisResult(BaseModel):
     )
     unresolved_disagreements: list[str] = Field(
         default_factory=list, description="Unresolved disagreements between nodes"
+    )
+    # Intelligence Layer additions
+    minority_report: str | None = Field(
+        default=None,
+        description="Single strongest dissenting expert opinion",
+    )
+    what_would_change_my_mind: list[str] = Field(
+        default_factory=list,
+        description="Conditions that would change the verdict",
+    )
+    confidence_breakdown: dict[str, float] | None = Field(
+        default=None,
+        description="Multi-dimensional confidence breakdown",
+    )
+    situation_dna: dict[str, str] | None = Field(
+        default=None,
+        description="Auto-generated situation profile",
     )
 
 
@@ -99,12 +116,94 @@ class NodeSelectorResult(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
+# New mode output schemas
+# ---------------------------------------------------------------------------
+
+
+class AssumptionResult(BaseModel):
+    """Structured output from the assumption excavator."""
+
+    assumptions: list[dict[str, str]] = Field(
+        description="List of assumptions with category and importance"
+    )
+
+
+class SignalNoiseResult(BaseModel):
+    """Structured output from signal vs noise analysis."""
+
+    signals: list[dict[str, Any]] = Field(default_factory=list)
+    noise: list[dict[str, Any]] = Field(default_factory=list)
+    gaps: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CascadeResult(BaseModel):
+    """Structured output from cascade mapper."""
+
+    immediate: list[dict[str, Any]] = Field(default_factory=list)
+    second_order: list[dict[str, Any]] = Field(default_factory=list)
+    third_order: list[dict[str, Any]] = Field(default_factory=list)
+    unexpected: list[dict[str, Any]] = Field(default_factory=list)
+    irreversible: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class PreMortemResult(BaseModel):
+    """Structured output from pre-mortem analysis."""
+
+    failure_scenarios: list[dict[str, Any]] = Field(default_factory=list)
+    most_likely_failure: str = Field(default="")
+    critical_fix: str = Field(default="")
+    confidence: str = Field(default="")
+
+
+class DebateResult(BaseModel):
+    """Structured output from debate analysis."""
+
+    for_position: dict[str, Any] = Field(default_factory=dict)
+    against_position: dict[str, Any] = Field(default_factory=dict)
+    arbitration: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReverseEngineerResult(BaseModel):
+    """Structured output from reverse engineering."""
+
+    surface_cause: dict[str, Any] = Field(default_factory=dict)
+    real_cause: dict[str, Any] = Field(default_factory=dict)
+    root_cause: dict[str, Any] = Field(default_factory=dict)
+    prevention: dict[str, Any] = Field(default_factory=dict)
+    confidence: str = Field(default="medium")
+
+
+class IcebergResult(BaseModel):
+    """Structured output from iceberg analysis."""
+
+    above_surface: list[dict[str, Any]] = Field(default_factory=list)
+    level_1: list[dict[str, Any]] = Field(default_factory=list)
+    level_2: list[dict[str, Any]] = Field(default_factory=list)
+    level_3: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class StressTestResult(BaseModel):
+    """Structured output from stress testing."""
+
+    scenarios: list[dict[str, Any]] = Field(default_factory=list)
+    overall_robustness: str = Field(default="medium")
+    weakest_point: str = Field(default="")
+
+
+class ChatRouterResult(BaseModel):
+    """Structured output from chat routing."""
+
+    node_name: str = Field(description="Selected node for response")
+    node_persona: str = Field(default="")
+    reason: str = Field(default="")
+
+
+# ---------------------------------------------------------------------------
 # Hallucination detection patterns
-# Patterns use word-boundary regex matching to avoid false positives.
-# We intentionally keep patterns conservative — better a few missed placeholders
-# than false-positive retries that waste tokens and frustrate users.
+# ---------------------------------------------------------------------------
+
 PLACEHOLDER_PATTERNS: list[tuple[str, str]] = [
-    # (pattern, reason) — each pattern is checked with word-boundary matching
     (r"\bplaceholder\b", "placeholder"),
     (r"\blorem ipsum\b", "lorem ipsum"),
     (r"\bn/a\b", "n/a"),
@@ -112,22 +211,13 @@ PLACEHOLDER_PATTERNS: list[tuple[str, str]] = [
     (r"\bnot applicable\b", "not applicable"),
     (r"\bto be determined\b", "to be determined"),
     (r"\btbd\b", "tbd"),
-    (r"\u2026|\\ldots\b", "ellipsis"),  # ellipsis placeholder
-    (r"\[\s*\.{3,}\s*\]", "bracket ellipsis"),  # [...] as placeholder
-    # "insert" and "example" are intentionally excluded because they're too common
-    # in legitimate text (e.g., "insert a new record", "for example").
-    # "string" is excluded because it's a common engineering/data term
-    # (e.g., "a string of characters", "the function returns a string").
+    (r"\u2026|\\ldots\b", "ellipsis"),
+    (r"\[\s*\.{3,}\s*\]", "bracket ellipsis"),
 ]
 
 
 def is_hallucinated(output: NodeOutput) -> bool:
-    """Detect if a node output contains hallucinated or placeholder content.
-
-    Checks for:
-    1. Placeholder patterns in the text (using word-boundary regex matching)
-    2. Minimum reasoning length requirement
-    """
+    """Detect if a node output contains hallucinated or placeholder content."""
     import re
 
     all_text = (
@@ -153,29 +243,20 @@ def is_hallucinated(output: NodeOutput) -> bool:
 
 
 def clean_json_response(raw: str) -> str:
-    """Clean a raw LLM response to extract valid JSON.
-
-    Strips markdown code fences, leading/trailing whitespace,
-    and any text before the first '{' or '[' and after the last '}' or ']'.
-
-    Handles both object-wrapped ({"...": ...}) and array-wrapped
-    ([{...}]) responses.
-    """
+    """Clean a raw LLM response to extract valid JSON."""
     text = raw.strip()
 
-    # Remove markdown code fences (```json ... ``` or ``` ... ```)
+    # Remove markdown code fences
     if text.startswith("```"):
         lines = text.split("\n")
         fence_start = 0
         fence_end = len(lines)
 
-        # Find the first ``` (opening fence)
         for i, line in enumerate(lines):
             if line.strip().startswith("```"):
                 fence_start = i + 1
                 break
 
-        # Find the last ``` (closing fence)
         for i in range(len(lines) - 1, fence_start - 1, -1):
             if lines[i].strip().startswith("```"):
                 fence_end = i
@@ -183,22 +264,18 @@ def clean_json_response(raw: str) -> str:
 
         text = "\n".join(lines[fence_start:fence_end]).strip()
 
-    # Try to find the outermost JSON structure: either {...} or [...]
-    # If the response wraps in an array like [{...}], we extract the object
+    # Find outermost JSON structure
     first_brace = text.find("{")
     first_bracket = text.find("[")
 
     if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
-        # Object-wrapped: find the first '{' and last '}'
         last_brace = text.rfind("}")
         if last_brace > first_brace:
             text = text[first_brace : last_brace + 1]
     elif first_bracket != -1:
-        # Array-wrapped: find the first '[' and last ']'
         last_bracket = text.rfind("]")
         if last_bracket > first_bracket:
             text = text[first_bracket : last_bracket + 1]
-            # If the array contains a single object, unwrap it
             inner = text.strip()
             if inner.startswith("[") and inner.endswith("]"):
                 inner_content = inner[1:-1].strip()

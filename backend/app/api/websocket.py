@@ -8,17 +8,27 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from backend.app.core.config import settings
-from backend.app.graph.state import PipelineStatus
-from backend.app.schemas.node_output import (
+from sqlalchemy import select
+
+from app.core.config import settings
+from app.core.database import async_session
+from app.graph.state import PipelineStatus
+from app.models.case_study_context import CaseStudyContext
+from app.models.case_study_node import CaseStudyNode
+from app.models.session import Session
+from app.schemas.node_output import (
     NodeOutput,
     clean_json_response,
     confidence_to_level,
     is_hallucinated,
 )
-from backend.app.services.hf_service import HFService
-from backend.app.services.node_selector import NodeSelector
-from backend.app.graph.council_graph import CouncilGraph
+from app.services.hf_service import HFService
+from app.services.llm_router import get_llm_router
+from app.services.ghost_mode import GhostModeManager
+from app.services.redaction import RedactionAssistant
+from app.services.chat_router import ChatRouter
+from app.services.node_selector import NodeSelector
+from app.graph.council_graph import CouncilGraph
 
 logger = logging.getLogger(__name__)
 
@@ -227,13 +237,13 @@ async def _handle_resume(
 
 
 async def _generate_with_retry(
-    hf_service: HFService,
+    llm_service: Any,
     system_prompt: str,
     user_prompt: str,
     max_tokens: int,
 ) -> tuple[dict[str, Any] | None, str]:
     """Generate an LLM response and parse as JSON, with one retry on failure."""
-    response, model = await hf_service.generate(system_prompt, user_prompt, max_tokens=max_tokens)
+    response, model = await llm_service.generate(system_prompt, user_prompt, max_tokens=max_tokens)
 
     parsed = _parse_json_response(response)
     if parsed is not None:
@@ -242,7 +252,7 @@ async def _generate_with_retry(
     # Retry once with explicit instruction
     logger.warning("JSON parse failed on first attempt, retrying...")
     retry_system = system_prompt + CASE_STUDY_RETRY_PROMPT
-    response2, model2 = await hf_service.generate(retry_system, user_prompt, max_tokens=max_tokens)
+    response2, model2 = await llm_service.generate(retry_system, user_prompt, max_tokens=max_tokens)
     parsed2 = _parse_json_response(response2)
     if parsed2 is not None:
         return parsed2, model2
@@ -256,20 +266,36 @@ async def _handle_case_study(
     nodes: list[dict[str, str]],
     guiding_question: str,
     case_context: str,
+    ghost_level: str = "off",
 ) -> None:
-    hf_service = HFService()
+    llm_service = HFService()
+    ghost_mgr = GhostModeManager()
+
+    # Check if ghost mode restricts this
+    can_proceed, restriction = await ghost_mgr.can_analyze(ghost_level)
+    if not can_proceed:
+        await sender.send({"type": "error", "message": restriction})
+        return
 
     context = case_context
+
+    # Redact PII if ghost mode is active
+    if ghost_level != "off":
+        redactor = RedactionAssistant()
+        context, redactions = await redactor.redact(context)
+        if redactions:
+            await sender.send({"type": "pii_redactions", "redactions": redactions})
+
     if len(context) > 6000:
         try:
-            context = await hf_service.summarize_text(
+            context = await llm_service.summarize_text(
                 context, filename="case_documents"
             )
         except Exception as e:
             logger.warning("Summarization failed, using raw context: %s", e)
     if len(context) > 10000:
         try:
-            context = await hf_service.summarize_text(context, filename="combined")
+            context = await llm_service.summarize_text(context, filename="combined")
         except Exception as e:
             logger.warning("Global compression failed, using previous context: %s", e)
 
@@ -301,7 +327,7 @@ async def _handle_case_study(
             f"{CASE_STUDY_JSON_SCHEMA}\n"
         )
         expert_tasks[name] = _generate_with_retry(
-            hf_service,
+            llm_service,
             system_prompt,
             user_prompt,
             max_tokens=settings.HF_EXPERT_MAX_TOKENS,
@@ -371,7 +397,7 @@ async def _handle_case_study(
 
     # Cross-check
     try:
-        cross_response, _ = await hf_service.generate(
+        cross_response, _ = await llm_service.generate(
             "You are an impartial cross-check analyst. Compare the expert analyses below and identify areas of agreement, disagreement, and contradictions. "
             "Respond with a JSON object: {\"analysis\": \"<string>\", \"consensus_score\": <0.0-1.0>}",
             f"Expert Analyses:\n\n{expert_summaries}\n\nProvide a cross-check analysis.",
@@ -395,7 +421,7 @@ async def _handle_case_study(
     await sender.send({"type": "case_synthesize", "status": "synthesizing"})
 
     try:
-        synth_response, _ = await hf_service.generate(
+        synth_response, _ = await llm_service.generate(
             "You are a neutral synthesizer. Combine all expert analyses into a coherent final assessment. "
             "Respond with a JSON object: {\"verdict\": \"<string>\", \"reasoning\": \"<string>\", \"confidence\": \"<high|medium|low>\", \"consensus_score\": <0.0-1.0>, \"critical_findings\": [\"<string>\"], \"recommendations\": [\"<string>\"], \"unresolved_disagreements\": [\"<string>\"]}",
             f"Guiding Question: {guiding_question or 'N/A'}\n\nExpert Analyses:\n{expert_summaries}\n\nCross-check:\n{cross_check_data.get('analysis', '')}\n\nProvide a synthesis.",
@@ -438,6 +464,7 @@ async def _stream_graph_events(
     session_id: str,
     user_id: int,
     council_graph: CouncilGraph,
+    ghost_level: str = "off",
 ) -> None:
     async def on_node_start(node_name: str, status_text: str) -> None:
         await sender.send(
@@ -447,6 +474,25 @@ async def _stream_graph_events(
                 "status": status_text,
             }
         )
+
+    # Redact PII if ghost mode is active
+    if ghost_level != "off":
+        from app.services.redaction import RedactionAssistant
+        redactor = RedactionAssistant()
+        redacted_situation, redactions = await redactor.redact(situation)
+        if redactions:
+            await sender.send({"type": "pii_redactions", "redactions": redactions})
+        situation = redacted_situation
+
+    # Send assumption excavator results if applicable
+    try:
+        from app.agents.assumption_excavator import AssumptionExcavator
+        excavator = AssumptionExcavator()
+        assumptions = await excavator.excavate_with_fallback(situation)
+        if assumptions:
+            await sender.send({"type": "assumptions", "assumptions": assumptions})
+    except Exception:
+        pass
 
     selector = NodeSelector(council_graph.hf_service)
 
@@ -468,7 +514,7 @@ async def _stream_graph_events(
     domains = [n["name"] for n in selected_nodes]
 
     await on_node_start("experts", "expert_processing")
-    from backend.app.agents.expert_node import ExpertNode
+    from app.agents.expert_node import ExpertNode
 
     expert_tasks = {}
     for domain in domains:
@@ -490,8 +536,8 @@ async def _stream_graph_events(
         else:
             output = result
             experts[domain] = output
-            # Store partial result
-            if sender.redis is not None:
+            # Store partial result (skip in ghost mode)
+            if sender.redis is not None and ghost_level == "off":
                 await _store_partial_result(sender.redis, sender.session_id, domain, output)
             # Send structured data that frontend can use
             await sender.send(
@@ -538,6 +584,9 @@ async def _stream_graph_events(
                 "reasoning": synthesis_output["reasoning"],
                 "confidence": synthesis_output["confidence"],
                 "consensus_score": synthesis_output["consensus_score"],
+                "minority_report": synthesis_output.get("minority_report", ""),
+                "what_would_change_my_mind": synthesis_output.get("what_would_change_my_mind", []),
+                "confidence_breakdown": synthesis_output.get("confidence_breakdown", {}),
             },
             "status": "completed",
         }
@@ -566,6 +615,9 @@ async def _stream_graph_events(
                 "verdict": synthesis_output["verdict"],
                 "synthesis_reasoning": synthesis_output["reasoning"],
                 "synthesis_confidence": synthesis_output["confidence"],
+                "minority_report": synthesis_output.get("minority_report", ""),
+                "what_would_change_my_mind": synthesis_output.get("what_would_change_my_mind", []),
+                "confidence_breakdown": synthesis_output.get("confidence_breakdown", {}),
             },
         }
     )
@@ -619,22 +671,159 @@ async def websocket_endpoint(
             nodes = data.get("nodes", [])
             guiding_question = data.get("guidingQuestion", "")
             case_context = data.get("caseContext", "")
+            # Persist case study nodes and context to DB
+            try:
+                async with async_session() as db:
+                    # Get or create session record
+                    result = await db.execute(
+                        select(Session).where(Session.id == int(session_id))
+                    )
+                    db_session = result.scalar_one_or_none()
+                    if db_session:
+                        # Upsert nodes
+                        for idx, node in enumerate(nodes):
+                            stmt = select(CaseStudyNode).where(
+                                CaseStudyNode.session_id == int(session_id),
+                                CaseStudyNode.name == node["name"],
+                            )
+                            existing = (await db.execute(stmt)).scalar_one_or_none()
+                            if existing:
+                                existing.role = node.get("role", "")
+                                existing.behavior = node.get("behavior", "")
+                                existing.color = node.get("color", "")
+                                existing.order_index = idx
+                            else:
+                                db.add(
+                                    CaseStudyNode(
+                                        session_id=int(session_id),
+                                        name=node["name"],
+                                        role=node.get("role", ""),
+                                        behavior=node.get("behavior", ""),
+                                        color=node.get("color", ""),
+                                        order_index=idx,
+                                    )
+                                )
+                        # Save context if provided
+                        if case_context:
+                            db.add(
+                                CaseStudyContext(
+                                    session_id=int(session_id),
+                                    file_name="case_context",
+                                    extracted_text=case_context,
+                                    was_summarized=False,
+                                )
+                            )
+                        await db.commit()
+            except Exception as e:
+                logger.warning("Failed to persist case study data: %s", e)
             await _handle_case_study(sender, nodes, guiding_question, case_context)
+            return
+
+        # --- Handle chat message (post-analysis conversation) ---
+        if data.get("type") == "chat_message":
+            chat_question = data.get("content", "")
+            analysis_context = data.get("analysis_context", {})
+            if not chat_question:
+                await sender.send({"type": "error", "message": "chat_message content is required"})
+                return
+
+            chat_router = ChatRouter()
+            try:
+                # Determine which node should respond
+                routing = await chat_router.determine_node(chat_question, analysis_context)
+                await sender.send({
+                    "type": "chat_routing",
+                    "node": routing.get("node_name", "synthesizer"),
+                    "persona": routing.get("node_persona", "Council Synthesizer"),
+                })
+
+                # Generate streaming response
+                response_text = ""
+                async for token in chat_router.stream_response(
+                    chat_question, routing, analysis_context
+                ):
+                    response_text += token
+                    await sender.send({
+                        "type": "chat_token",
+                        "node": routing.get("node_name", "synthesizer"),
+                        "token": token,
+                    })
+
+                await sender.send({
+                    "type": "chat_complete",
+                    "node": routing.get("node_name", "synthesizer"),
+                    "content": response_text,
+                })
+            except Exception as e:
+                logger.error("Chat routing error: %s", e)
+                await sender.send({"type": "error", "message": f"Chat routing failed: {str(e)}"})
             return
 
         # --- Handle standard analysis mode ---
         situation = data.get("situation", "")
         user_id = data.get("user_id", 0)
+        analysis_mode = data.get("analysis_mode", "standard")
+        ghost_level = data.get("ghost_level", "off")
 
         if not situation:
             await sender.send({"type": "error", "message": "situation is required"})
             return
 
+        # Ghost Mode override: Void → force Local, Phantom → force Browser
+        ghost_mgr = GhostModeManager()
+        if ghost_level in ("void", "phantom"):
+            llm_override = ghost_mgr.get_llm_override(ghost_level)
+            if llm_override:
+                from app.services.llm_router import reset_llm_router
+                reset_llm_router(mode=llm_override)
+
+        # Ghost Mode disclosure
+        disclosure = ghost_mgr.get_disclosure(ghost_level)
+        if disclosure:
+            await sender.send({"type": "ghost_disclosure", "disclosure": disclosure})
+            await sender.send({"type": "ghost_timer", "message": "This analysis disappears in 23:47:12"})
+
         hf_service = HFService()
         council_graph = CouncilGraph(hf_service)
 
+        # Handle new analysis modes
+        if analysis_mode in ("signal_vs_noise", "cascade_mapper", "pre_mortem", "debate", "reverse_engineer", "iceberg"):
+            try:
+                await sender.send({"type": "node_start", "node": analysis_mode, "status": "processing"})
+
+                mode_map = {
+                    "signal_vs_noise": council_graph.run_signal_noise,
+                    "cascade_mapper": council_graph.run_cascade_map,
+                    "pre_mortem": council_graph.run_pre_mortem,
+                    "debate": council_graph.run_debate,
+                    "reverse_engineer": council_graph.run_reverse_engineer,
+                    "iceberg": council_graph.run_iceberg,
+                }
+                mode_fn = mode_map.get(analysis_mode)
+                if mode_fn:
+                    mode_output = await mode_fn(situation)
+                    await sender.send({
+                        "type": "node_complete",
+                        "node": analysis_mode,
+                        "data": {"mode": analysis_mode, "output": mode_output},
+                        "status": "completed",
+                    })
+                    await sender.send({
+                        "type": "complete",
+                        "data": {
+                            "status": "completed",
+                            "analysis_mode": analysis_mode,
+                            "mode_output": mode_output,
+                        },
+                    })
+            except Exception as e:
+                logger.error("Analysis mode '%s' failed: %s", analysis_mode, e)
+                await sender.send({"type": "error", "message": f"Analysis failed: {str(e)}"})
+            return
+
+        # Standard or Case Study pipeline
         await _stream_graph_events(
-            sender, situation, session_id, user_id, council_graph
+            sender, situation, session_id, user_id, council_graph, ghost_level
         )
 
     except WebSocketDisconnect:
