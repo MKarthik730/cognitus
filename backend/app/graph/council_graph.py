@@ -49,13 +49,15 @@ class CouncilGraph:
         workflow.add_node("run_distributor", self._run_distributor)
         workflow.add_node("run_experts", self._run_experts)
         workflow.add_node("run_cross_check", self._run_cross_check)
+        workflow.add_node("run_cross_examine", self._run_cross_examine)
         workflow.add_node("run_synthesizer", self._run_synthesizer)
 
         workflow.set_entry_point("run_assumption_excavator")
         workflow.add_edge("run_assumption_excavator", "run_distributor")
         workflow.add_edge("run_distributor", "run_experts")
         workflow.add_edge("run_experts", "run_cross_check")
-        workflow.add_edge("run_cross_check", "run_synthesizer")
+        workflow.add_edge("run_cross_check", "run_cross_examine")
+        workflow.add_edge("run_cross_examine", "run_synthesizer")
         workflow.add_edge("run_synthesizer", END)
 
         return workflow.compile()
@@ -97,7 +99,52 @@ class CouncilGraph:
 
     async def _run_cross_check(self, state: CouncilState) -> dict[str, Any]:
         output = await self.cross_checker.cross_check(state["experts"])
-        return {"cross_check": output, "status": "synthesizing"}
+        return {"cross_check": output, "status": "cross_examining"}
+
+    async def _run_cross_examine(self, state: CouncilState) -> dict[str, Any]:
+        """Run cross-examination between expert nodes.
+
+        Each node reviews the positions of other nodes and either maintains
+        or revises its position based on peer critique.
+        """
+        experts = state.get("experts", {})
+        cross_examine_results: dict[str, Any] = {}
+
+        tasks = []
+        for domain, expert_data in experts.items():
+            from app.agents.expert_node import ExpertNode
+            # We need the hf_service from somewhere — use the existing one
+            # Reuse the cross_checker's service as a fallback
+            node = ExpertNode(domain, self.cross_checker.hf_service)
+            tasks.append(
+                node.cross_examine(
+                    position=expert_data.get("position", ""),
+                    reasoning=expert_data.get("reasoning", ""),
+                    other_experts=experts,
+                )
+            )
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for domain, result in zip(experts.keys(), results):
+            if isinstance(result, Exception):
+                cross_examine_results[domain] = {
+                    "maintains_position": True,
+                    "revision": None,
+                    "points_of_agreement": [],
+                    "points_of_disagreement": [],
+                    "error": str(result),
+                }
+            elif result is not None:
+                cross_examine_results[domain] = result.model_dump()
+            else:
+                cross_examine_results[domain] = {
+                    "maintains_position": True,
+                    "revision": None,
+                    "points_of_agreement": [],
+                    "points_of_disagreement": [],
+                }
+
+        return {"cross_examine": cross_examine_results, "status": "synthesizing"}
 
     async def _run_synthesizer(self, state: CouncilState) -> dict[str, Any]:
         start = time.monotonic()

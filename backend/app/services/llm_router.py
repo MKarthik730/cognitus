@@ -26,7 +26,7 @@ import platform
 import re
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from app.core.config import settings
 
@@ -183,6 +183,13 @@ class LLMProvider(ABC):
     ) -> tuple[str, str]:
         """Generate a response. Returns (response_text, model_name)."""
         ...
+
+    async def stream(
+        self, system: str, user: str, max_tokens: int | None = None
+    ) -> AsyncGenerator[str, None]:
+        """Stream a response token by token. Default yields the full response as one token."""
+        result, _ = await self.generate(system, user, max_tokens)
+        yield result
 
     async def generate_with_image(
         self, system: str, user: str, image_data_uri: str, max_tokens: int | None = None
@@ -511,6 +518,15 @@ class LLMRouter:
         if not self._provider:
             raise RuntimeError(f"No provider available for mode {self.mode}")
         return await self._provider.generate_with_image(system, user, image_data_uri, max_tokens)
+
+    async def stream(
+        self, system: str, user: str, max_tokens: int | None = None
+    ) -> AsyncGenerator[str, None]:
+        """Stream a response token by token from the active provider."""
+        if not self._provider:
+            raise RuntimeError(f"No provider available for mode {self.mode}")
+        async for token in self._provider.stream(system, user, max_tokens):
+            yield token
 
     async def summarize_text(
         self, text: str, filename: str = "document", max_length: int = 6000

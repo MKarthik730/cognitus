@@ -270,6 +270,104 @@ export function connectWithOptions(situation, sessionId, userId, options = {}) {
   createWebSocket();
 }
 
+// ============================================================
+// TASK 5: Cache API
+// ============================================================
+
+/**
+ * Get cache statistics.
+ */
+export async function getCacheInfo() {
+  try {
+    const res = await fetch(`${API_BASE}/cache/info`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Clear the result cache.
+ */
+export async function clearCache() {
+  try {
+    const res = await fetch(`${API_BASE}/cache/clear`, { method: 'POST' });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ============================================================
+// TASK 11: Export API
+// ============================================================
+
+/**
+ * Export analysis results in the specified format.
+ * @param {string} format - 'json' | 'pdf' | 'share'
+ * @param {object} data - analysis data to export
+ */
+export async function exportAnalysis(format, data) {
+  try {
+    const res = await fetch(`${API_BASE}/export/${format}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+    if (format === 'json') {
+      return { blob: await res.blob(), filename: 'analysis.json' };
+    }
+    if (format === 'pdf') {
+      return { blob: await res.blob(), filename: 'analysis.pdf' };
+    }
+    // share format returns a URL
+    const shareData = await res.json();
+    return { url: shareData.url || shareData.share_url };
+  } catch (e) {
+    console.error('Export error:', e);
+    return null;
+  }
+}
+
+// ============================================================
+// TASK 12: Eval Harness API
+// ============================================================
+
+/**
+ * Run the evaluation harness.
+ * @param {string} [filter] - optional test name filter
+ */
+export async function runEval(filter) {
+  try {
+    const params = filter ? `?filter=${encodeURIComponent(filter)}` : '';
+    const res = await fetch(`${API_BASE}/eval/run${params}`);
+    if (!res.ok) throw new Error(`Eval failed: ${res.status}`);
+    return res.json();
+  } catch (e) {
+    console.error('Eval error:', e);
+    return null;
+  }
+}
+
+/**
+ * Get eval results from previous run.
+ */
+export async function getEvalResults() {
+  try {
+    const res = await fetch(`${API_BASE}/eval/results`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============================================================
+// Session API
+// ============================================================
+
 export async function createSession(title, situation) {
   const token = localStorage.getItem('token');
   const res = await fetch(`${API_BASE}/sessions/`, {

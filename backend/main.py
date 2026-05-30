@@ -9,10 +9,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from app.api.routes import auth, sessions, analyze
+from app.api.routes import auth, sessions, analyze, cache, export
+from app.api.routes.config_route import router as config_router
 from app.api.upload import router as upload_router
 from app.api.websocket import router as ws_router
 from app.core.config import settings
+from app.core.database import init_db
 from app.services.hf_service import HFService
 from app.services.queue_worker import QueueWorker
 
@@ -72,11 +74,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.routes.eval import router as eval_router
+
 app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(analyze.router)
+app.include_router(cache.router)
+app.include_router(export.router)
+app.include_router(eval_router)
+app.include_router(config_router)
 app.include_router(upload_router)
 app.include_router(ws_router)
+
+
+@app.on_event("startup")
+async def on_startup():
+    """Initialize database extensions (pgvector) on startup."""
+    await init_db()
 
 
 @app.get("/api/nodes")

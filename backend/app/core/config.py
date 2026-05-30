@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # Database
     # ------------------------------------------------------------------
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/cortex"
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"
 
     # ------------------------------------------------------------------
     # Auth
@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # FAISS / Vector
     # ------------------------------------------------------------------
     FAISS_INDEX_PATH: str = "./data/faiss"
+
+    # ------------------------------------------------------------------
+    # Enrichment
+    # ------------------------------------------------------------------
+    TAVILY_API_KEY: str = ""
+    ENRICHMENT_ENABLED: bool = True
+
+    # ------------------------------------------------------------------
+    # Eval Harness
+    # ------------------------------------------------------------------
+    ADMIN_SECRET: str = ""
 
     # ------------------------------------------------------------------
     # Onboarding

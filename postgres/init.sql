@@ -80,3 +80,20 @@ CREATE INDEX IF NOT EXISTS idx_contradictions_analysis_id ON contradictions(anal
 CREATE INDEX IF NOT EXISTS idx_agreements_analysis_id ON agreements(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_log_user_id ON api_usage_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_log_created_at ON api_usage_log(created_at);
+
+-- pgvector extension for RAG
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Document chunks table for RAG context slicing
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding vector(384),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_session_id ON document_chunks(session_id);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding ON document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);

@@ -6,6 +6,8 @@ let offsetX = 0;
 let offsetY = 0;
 let animFrame = null;
 let nodes = [];
+let hoveredNode = null;
+let selectedNodeId = null;
 
 const NODE_W = 160;
 const NODE_H = 48;
@@ -13,9 +15,15 @@ const NODE_R = 12;
 const LEVEL_GAP = 110;
 const EXPERT_GAP = 200;
 
+// Canvas state for interaction
+let canvasEl = null;
+let ctx = null;
+let canvasW = 0;
+let canvasH = 0;
+
 export function buildGraphLayout(state) {
-  const w = document.getElementById('main-canvas').width;
-  const h = document.getElementById('main-canvas').height;
+  const w = document.getElementById('main-canvas')?.width || 800;
+  const h = document.getElementById('main-canvas')?.height || 600;
   const cx = w / 2;
   const list = [];
 
@@ -30,6 +38,8 @@ export function buildGraphLayout(state) {
     const expertData = state.experts.find(e => e.domain === d);
     const dynamicInfo = dynamicNodes.find(n => n.name === d);
     const color = getDynamicNodeColor(d, i);
+    const isStreaming = state.streamingNodes && state.streamingNodes[d] && state.streamingNodes[d].active;
+    const isCached = state.cacheHits && state.cacheHits[d] === true;
     list.push({
       id: `expert-${d}`,
       label: dynamicInfo ? dynamicInfo.role : (d.charAt(0).toUpperCase() + d.slice(1)),
@@ -41,14 +51,52 @@ export function buildGraphLayout(state) {
       isExpert: true,
       complete: !!expertData,
       confidence: expertData ? expertData.confidence : null,
+      streaming: isStreaming,
+      cached: isCached,
     });
   });
 
   const crossY = expertY + NODE_H + LEVEL_GAP;
-  list.push({ id: 'crosscheck', label: 'Cross-Check', type: 'crosscheck', x: cx - NODE_W / 2, y: crossY });
+  const crossStreaming = state.streamingNodes && state.streamingNodes['cross_check'] && state.streamingNodes['cross_check'].active;
+  list.push({
+    id: 'crosscheck',
+    label: 'Cross-Check',
+    type: 'crosscheck',
+    x: cx - NODE_W / 2,
+    y: crossY,
+    streaming: crossStreaming,
+  });
 
   const synthY = crossY + NODE_H + LEVEL_GAP;
-  list.push({ id: 'synthesizer', label: 'Synthesizer', type: 'synthesizer', x: cx - NODE_W / 2, y: synthY });
+  const synthStreaming = state.streamingNodes && state.streamingNodes['synthesizer'] && state.streamingNodes['synthesizer'].active;
+  list.push({
+    id: 'synthesizer',
+    label: 'Synthesizer',
+    type: 'synthesizer',
+    x: cx - NODE_W / 2,
+    y: synthY,
+    streaming: synthStreaming,
+  });
+
+  // Add thinking steps as floating nodes
+  if (state.thinkingSteps && state.thinkingSteps.length > 0) {
+    const steps = state.thinkingSteps.slice(-3); // Show last 3
+    steps.forEach((step, i) => {
+      const nodeRef = list.find(n => n.type === step.node || n.shortLabel === step.node);
+      if (nodeRef) {
+        list.push({
+          id: `thinking-${step.node}-${i}`,
+          label: step.step || 'Reasoning',
+          type: 'thinking',
+          x: nodeRef.x + NODE_W + 20,
+          y: nodeRef.y + i * 30,
+          parentNode: step.node,
+          content: step.content,
+          isThinking: true,
+        });
+      }
+    });
+  }
 
   nodes = list;
   return list;
@@ -73,19 +121,39 @@ function getCompleteStatus(state) {
 export function renderCanvas(state) {
   const canvas = document.getElementById('main-canvas');
   if (!canvas) return;
+  canvasEl = canvas;
   const rect = canvas.parentElement.getBoundingClientRect();
   canvas.width = rect.width * window.devicePixelRatio;
   canvas.height = rect.height * window.devicePixelRatio;
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
 
-  const ctx = canvas.getContext('2d');
+  ctx = canvas.getContext('2d');
   ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  const w = rect.width;
-  const h = rect.height;
+  canvasW = rect.width;
+  canvasH = rect.height;
 
-  ctx.fillStyle = '#0a0f1e';
-  ctx.fillRect(0, 0, w, h);
+  // Background — transparent (glass via CSS), with subtle grid overlay
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Subtle grid
+  ctx.save();
+  ctx.strokeStyle = 'rgba(200, 149, 106, 0.04)';
+  ctx.lineWidth = 0.5;
+  const gridSize = 40;
+  for (let x = 0; x < canvasW; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvasH);
+    ctx.stroke();
+  }
+  for (let y = 0; y < canvasH; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvasW, y);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   ctx.save();
   ctx.translate(offsetX, offsetY);
@@ -96,8 +164,12 @@ export function renderCanvas(state) {
   const active = getActiveNode(state);
   const { completed, expertComplete } = getCompleteStatus(state);
 
-  drawConnections(ctx, w, h, state, active, completed, expertComplete);
+  drawConnections(ctx, canvasW, canvasH, state, active, completed, expertComplete);
   nodes.forEach(n => {
+    if (n.isThinking) {
+      drawThinkingNode(ctx, n);
+      return;
+    }
     const isActive =
       active === n.id ||
       (active === 'experts' && n.isExpert) ||
@@ -109,41 +181,67 @@ export function renderCanvas(state) {
       (n.type === 'crosscheck' && completed.crosscheck) ||
       (n.type === 'synthesizer' && completed.synthesizer) ||
       (n.isExpert && expertComplete[n.type]);
-    drawNode(ctx, n, isActive, isComplete);
+    const isSelected = selectedNodeId === n.id;
+    drawNode(ctx, n, isActive, isComplete, isSelected);
   });
 
   ctx.restore();
 
-  renderMinimap(state, rect.width, rect.height);
+  renderMinimap(state, canvasW, canvasH);
 }
 
-function drawNode(ctx, node, isActive, isComplete) {
+function drawNode(ctx, node, isActive, isComplete, isSelected) {
   const nodeColor = node.color || resolveColor(getNodeColor(node.type));
   ctx.save();
 
-  // Background: #0a0f1e
-  ctx.fillStyle = '#0a0f1e';
+  // Streaming glow — warm peach
+  if (node.streaming) {
+    ctx.shadowColor = '#C8956A';
+    ctx.shadowBlur = 24;
+  }
+
+  // Background
+  ctx.fillStyle = '#261C14';
   roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
   ctx.fill();
 
-  // Border styling
+  // Reset shadow for stroke
+  ctx.shadowBlur = 0;
+
+  // Border styling — warm tones
   if (isActive) {
-    ctx.strokeStyle = '#00ffcc';
+    ctx.strokeStyle = '#C8956A';
     ctx.lineWidth = 2;
-    ctx.shadowColor = '#00ffcc';
+    ctx.shadowColor = '#C8956A';
     ctx.shadowBlur = 16;
+  } else if (isSelected) {
+    ctx.strokeStyle = '#E8B89A';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#E8B89A';
+    ctx.shadowBlur = 12;
   } else {
-    ctx.strokeStyle = 'rgba(124, 58, 237, 0.2)';
+    ctx.strokeStyle = 'rgba(74, 48, 32, 0.6)';
     ctx.lineWidth = 1.5;
     ctx.shadowBlur = 0;
   }
-  ctx.globalAlpha = isComplete || isActive ? 1 : 0.6;
+  ctx.globalAlpha = isComplete || isActive || isSelected ? 1 : 0.6;
   roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
   ctx.stroke();
 
   ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
 
-  ctx.fillStyle = '#e2e4eb';
+  // Cached badge
+  if (node.cached) {
+    ctx.fillStyle = '#7DB88A';
+    ctx.font = '400 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText('⚡ cached', node.x + NODE_W - 8, node.y + 4);
+  }
+
+  // Label
+  ctx.fillStyle = '#F5EDE6';
   ctx.font = '600 12px "JetBrains Mono", monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -159,13 +257,14 @@ function drawNode(ctx, node, isActive, isComplete) {
     ctx.fillStyle = nodeColor;
     ctx.fill();
     ctx.font = '600 12px "DM Sans", sans-serif';
-    ctx.fillStyle = '#e2e4eb';
+    ctx.fillStyle = '#F5EDE6';
     ctx.textAlign = 'left';
     ctx.fillText(displayLabel, labelX + 12, labelY);
   } else {
     ctx.fillText(displayLabel, labelX, labelY);
   }
 
+  // Confidence indicator dot (bottom of node)
   if (node.isExpert && node.complete && node.confidence) {
     const confColor = node.confidence === 'high' ? resolveColor('--success') :
       node.confidence === 'low' ? resolveColor('--danger') : resolveColor('--warning');
@@ -173,6 +272,21 @@ function drawNode(ctx, node, isActive, isComplete) {
     ctx.arc(labelX + 8, labelY + 14, 3, 0, Math.PI * 2);
     ctx.fillStyle = confColor;
     ctx.fill();
+  }
+
+  // Streaming indicator (pulsing dot) — warm peach
+  if (node.streaming) {
+    const pulse = Math.sin(Date.now() / 300) * 0.5 + 0.5;
+    ctx.beginPath();
+    ctx.arc(node.x + NODE_W - 12, node.y + NODE_H / 2, 4, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200, 149, 106, ${pulse * 0.6 + 0.4})`;
+    ctx.fill();
+    // Outer pulse ring
+    ctx.beginPath();
+    ctx.arc(node.x + NODE_W - 12, node.y + NODE_H / 2, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(200, 149, 106, ${pulse * 0.3})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
   ctx.restore();
@@ -190,6 +304,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
 
   const edges = [];
 
+  // Distributor -> Experts (bezier curves)
   domains.forEach((d, i) => {
     const ex = cx + (i - (expertCount - 1) / 2) * EXPERT_GAP;
     const srcX = dist.x + NODE_W / 2;
@@ -199,22 +314,24 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
 
     const isActiveLine = active === 'experts' || active === 'distributor';
     const isDone = expertComplete[d];
-    edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
-    drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
+    const isCached = state.cacheHits && state.cacheHits[d] === true;
+    edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone, cached: isCached });
+    drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, isCached);
   });
 
   const cross = findNode('crosscheck');
   if (cross) {
+    // Experts -> Cross-Check (bezier curves)
     domains.forEach((d, i) => {
       const ex = cx + (i - (expertCount - 1) / 2) * EXPERT_GAP;
       const srcX = ex + NODE_W / 2;
       const srcY = expertY + NODE_H;
       const tgtX = cross.x + NODE_W / 2;
       const tgtY = cross.y;
-      const isActiveLine = active === 'cross_check';
+      const isActiveLine = active === 'cross_check' || active === 'experts';
       const isDone = expertComplete[d] && completed.crosscheck;
       edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
-      drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
+      drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, false);
     });
 
     const synth = findNode('synthesizer');
@@ -226,7 +343,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
       const isActiveLine = active === 'synthesizer' || active === 'cross_check';
       const isDone = completed.crosscheck && completed.synthesizer;
       edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
-      drawLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
+      drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, false);
     }
   }
 
@@ -238,37 +355,116 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
     const px = edge.x1 + (edge.x2 - edge.x1) * t;
     const py = edge.y1 + (edge.y2 - edge.y1) * t;
     ctx.save();
-    ctx.shadowColor = '#00ffcc';
+    ctx.shadowColor = '#C8956A';
     ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.arc(px, py, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#00ffcc';
+    ctx.fillStyle = '#C8956A';
     ctx.fill();
     ctx.restore();
   });
+
+  // Cross-examination confidence arcs
+  if (state.crossCheckResult && state.crossCheckResult.contradictions) {
+    const contradictions = state.crossCheckResult.contradictions;
+    contradictions.forEach((contra, idx) => {
+      if (contra.domains && contra.domains.length >= 2) {
+        const n1 = findNode(`expert-${contra.domains[0]}`);
+        const n2 = findNode(`expert-${contra.domains[1]}`);
+        if (n1 && n2) {
+          drawConfidenceArc(ctx, n1, n2, 'conflict', idx);
+        }
+      }
+    });
+  }
+  if (state.crossCheckResult && state.crossCheckResult.agreements) {
+    state.crossCheckResult.agreements.forEach((agree, idx) => {
+      if (agree.domains && agree.domains.length >= 2) {
+        const n1 = findNode(`expert-${agree.domains[0]}`);
+        const n2 = findNode(`expert-${agree.domains[1]}`);
+        if (n1 && n2) {
+          drawConfidenceArc(ctx, n1, n2, 'agreement', idx);
+        }
+      }
+    });
+  }
 }
 
-function drawLine(ctx, x1, y1, x2, y2, isActive, isDone) {
+/**
+ * Draw a bezier curve between two points.
+ */
+function drawBezier(ctx, x1, y1, x2, y2, isActive, isDone, isCached) {
   ctx.save();
   ctx.beginPath();
+
+  const cy = (y1 + y2) / 2;
+  const cpx1 = x1;
+  const cpy1 = cy;
+  const cpx2 = x2;
+  const cpy2 = cy;
+
   ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  if (isDone) {
-    ctx.strokeStyle = 'rgba(124, 58, 237, 0.5)';
+  ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, x2, y2);
+
+  if (isCached) {
+    ctx.strokeStyle = '#7DB88A';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 2;
+  } else if (isDone) {
+    ctx.strokeStyle = 'rgba(200, 149, 106, 0.5)';
     ctx.lineWidth = 2;
   } else if (isActive) {
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    grad.addColorStop(0, '#00d4ff');
-    grad.addColorStop(1, '#7c3aed');
+    grad.addColorStop(0, '#C8956A');
+    grad.addColorStop(1, '#D4A574');
     ctx.strokeStyle = grad;
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#7c3aed';
+    ctx.shadowColor = '#C8956A';
     ctx.shadowBlur = 12;
   } else {
-    ctx.strokeStyle = 'rgba(124, 58, 237, 0.2)';
+    ctx.strokeStyle = 'rgba(74, 48, 32, 0.5)';
     ctx.lineWidth = 1.5;
   }
   ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/**
+ * Draw a confidence arc between two expert nodes for cross-examination.
+ */
+function drawConfidenceArc(ctx, n1, n2, type, index) {
+  const x1 = n1.x + NODE_W / 2;
+  const y1 = n1.y + NODE_H / 2;
+  const x2 = n2.x + NODE_W / 2;
+  const y2 = n2.y + NODE_H / 2;
+
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const arcHeight = type === 'conflict' ? -20 : 20;
+
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.quadraticCurveTo(mx, my + arcHeight, x2, y2);
+
+  const color = type === 'conflict' ? '#C86B5A' : '#7DB88A';
+  const alpha = type === 'conflict' ? 0.5 : 0.4;
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = type === 'conflict' ? 2 : 1.5;
+  ctx.setLineDash(type === 'conflict' ? [] : [3, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Small label
+  ctx.fillStyle = hexToRgba(color, 0.7);
+  ctx.font = '400 8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const label = type === 'conflict' ? '✗' : '✓';
+  ctx.fillText(label, mx, my + arcHeight + (type === 'conflict' ? -8 : 8));
+
   ctx.restore();
 }
 
@@ -284,7 +480,7 @@ function renderMinimap(state, mainW, mainH) {
   const mCtx = mCanvas.getContext('2d');
   mCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  mCtx.fillStyle = '#1a1f3a';
+  mCtx.fillStyle = '#2E1F15';
   mCtx.fillRect(0, 0, mw, mh);
 
   const scaleX = mw / mainW;
@@ -297,10 +493,20 @@ function renderMinimap(state, mainW, mainH) {
   mCtx.translate(-mainW / 2, -mainH / 2);
 
   nodes.forEach(n => {
+    if (n.isThinking) return;
     const color = n.color || resolveColor(getNodeColor(n.type));
     mCtx.fillStyle = hexToRgba(color, 0.5);
     mCtx.fillRect(n.x, n.y, NODE_W, NODE_H);
   });
+
+  // Viewport indicator — warm peach
+  const vw = mainW / scale;
+  const vh = mainH / scale;
+  const vx = -offsetX / scale;
+  const vy = -offsetY / scale;
+  mCtx.strokeStyle = 'rgba(200, 149, 106, 0.25)';
+  mCtx.lineWidth = 1;
+  mCtx.strokeRect(vx, vy, vw, vh);
 
   mCtx.restore();
 }
@@ -356,38 +562,255 @@ export function fitView() {
   offsetY = 0;
 }
 
+export function getScale() { return scale; }
+export function getNodes() { return nodes; }
+
+// ================================================================
+// HIT TESTING — Find which node is at a given canvas coordinate
+// ================================================================
+
 /**
- * Draw a thinking step node (R1 reasoning) with dashed border and lighter color.
+ * Convert screen coordinates to canvas-space coordinates.
  */
+function screenToCanvas(clientX, clientY) {
+  const rect = canvasEl.getBoundingClientRect();
+  const px = (clientX - rect.left) * (canvasW / rect.width);
+  const py = (clientY - rect.top) * (canvasH / rect.height);
+  return {
+    x: (px - offsetX) / scale,
+    y: (py - offsetY) / scale,
+  };
+}
+
+/**
+ * Find the node at the given canvas-space coordinates.
+ */
+function hitTestNodes(canvasX, canvasY) {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (canvasX >= n.x && canvasX <= n.x + NODE_W &&
+        canvasY >= n.y && canvasY <= n.y + NODE_H) {
+      return n;
+    }
+  }
+  return null;
+}
+
+export function initCanvas() {
+  const canvas = document.getElementById('main-canvas');
+  if (!canvas) return;
+  canvasEl = canvas;
+
+  // Zoom with scroll wheel
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.deltaY < 0) zoomIn();
+    else zoomOut();
+  }, { passive: false });
+
+  // Pan with middle mouse or space+drag
+  let isPanning = false;
+  let startX, startY;
+  let isSpaceDown = false;
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !e.repeat) {
+      isSpaceDown = true;
+      canvas.style.cursor = 'grab';
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      isSpaceDown = false;
+      canvas.style.cursor = 'default';
+    }
+  });
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 1 || isSpaceDown) {
+      // Middle mouse or space+drag -> pan
+      isPanning = true;
+      startX = e.clientX - offsetX;
+      startY = e.clientY - offsetY;
+      canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    } else if (e.button === 0) {
+      // Left click -> select node or start panning if near edge
+      const pt = screenToCanvas(e.clientX, e.clientY);
+      const hit = hitTestNodes(pt.x, pt.y);
+      if (hit) {
+        selectedNodeId = hit.id;
+        setState({ selectedNode: hit });
+        showNodeTooltip(e.clientX, e.clientY, hit);
+      } else {
+        selectedNodeId = null;
+        setState({ selectedNode: null });
+        hideNodeTooltip();
+        // Start panning on left click on empty space
+        isPanning = true;
+        startX = e.clientX - offsetX;
+        startY = e.clientY - offsetY;
+        canvas.style.cursor = 'grabbing';
+      }
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (isPanning) {
+      offsetX = e.clientX - startX;
+      offsetY = e.clientY - startY;
+    } else {
+      // Hover detection for tooltip
+      const pt = screenToCanvas(e.clientX, e.clientY);
+      const hit = hitTestNodes(pt.x, pt.y);
+      if (hit && hit !== hoveredNode) {
+        hoveredNode = hit;
+        canvas.style.cursor = 'pointer';
+        showNodeTooltip(e.clientX, e.clientY, hit);
+      } else if (!hit) {
+        if (hoveredNode) {
+          hoveredNode = null;
+          canvas.style.cursor = 'default';
+          hideNodeTooltip();
+        }
+      }
+    }
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    isPanning = false;
+    canvas.style.cursor = isSpaceDown ? 'grab' : 'default';
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    isPanning = false;
+    hoveredNode = null;
+    canvas.style.cursor = 'default';
+    hideNodeTooltip();
+  });
+
+  // Double-click to fit view
+  canvas.addEventListener('dblclick', (e) => {
+    const pt = screenToCanvas(e.clientX, e.clientY);
+    const hit = hitTestNodes(pt.x, pt.y);
+    if (hit) {
+      // Zoom into clicked node
+      scale = Math.min(scale * 1.5, 3);
+      offsetX = e.clientX - (canvasW / 2) * scale;
+      offsetY = e.clientY - (canvasH / 2) * scale;
+    } else {
+      fitView();
+    }
+  });
+}
+
+// ================================================================
+// TOOLTIP
+// ================================================================
+
+let tooltipEl = null;
+
+function showNodeTooltip(screenX, screenY, node) {
+  if (!tooltipEl) {
+    tooltipEl = document.getElementById('tooltip');
+  }
+  if (!tooltipEl) return;
+
+  const state = getState();
+  let content = '';
+
+  if (node.isExpert) {
+    const expert = state.experts.find(e => e.domain === node.type);
+    content = `<strong>${node.shortLabel}</strong>`;
+    if (expert) {
+      content += `<br>Confidence: ${expert.confidence || 'medium'}`;
+      if (expert.model_used) content += `<br>Model: ${expert.model_used}`;
+      if (node.cached) content += `<br><span style="color:#7DB88A">⚡ From cache</span>`;
+    }
+    if (node.streaming) {
+      const streamingData = state.streamingNodes[node.type];
+      if (streamingData && streamingData.tokens) {
+        const preview = streamingData.tokens.slice(-60);
+        content += `<br><span style="color:#C8956A">▶ Streaming:</span> <span style="color:#C4A898;font-size:10px">${escapeHtml(preview)}</span>`;
+      } else {
+        content += `<br><span style="color:#C8956A">▶ Generating...</span>`;
+      }
+    }
+  } else if (node.isThinking) {
+    content = `<strong>${node.label}</strong>`;
+    if (node.content) {
+      content += `<br><span style="font-size:10px">${escapeHtml(node.content.slice(0, 80))}${node.content.length > 80 ? '...' : ''}</span>`;
+    }
+  } else {
+    content = `<strong>${node.label}</strong>`;
+    if (node.streaming) {
+      content += `<br><span style="color:#C8956A">▶ Processing...</span>`;
+    }
+    if (node.type === 'crosscheck' && state.crossCheckResult) {
+      const deps = state.contradictions.length;
+      const agrs = state.agreements.length;
+      content += `<br>${deps} conflicts, ${agrs} agreements`;
+    }
+  }
+
+  tooltipEl.innerHTML = content;
+  tooltipEl.classList.remove('hidden');
+
+  // Position tooltip
+  const rect = canvasEl.getBoundingClientRect();
+  let tx = screenX - rect.left + 16;
+  let ty = screenY - rect.top - 10;
+  const tw = tooltipEl.offsetWidth || 160;
+  const th = tooltipEl.offsetHeight || 60;
+  if (tx + tw > rect.width) tx = screenX - rect.left - tw - 16;
+  if (ty + th > rect.height) ty = rect.height - th - 4;
+  if (ty < 4) ty = 4;
+  tooltipEl.style.left = tx + 'px';
+  tooltipEl.style.top = ty + 'px';
+}
+
+function hideNodeTooltip() {
+  if (!tooltipEl) {
+    tooltipEl = document.getElementById('tooltip');
+  }
+  if (tooltipEl) {
+    tooltipEl.classList.add('hidden');
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ================================================================
+// THINKING NODE (R1 reasoning)
+// ================================================================
+
 function drawThinkingNode(ctx, node) {
   const color = node.color || resolveColor('--accent');
-  const alpha = 0.6;
-
   ctx.save();
 
-  // Dashed border for thinking nodes
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.strokeStyle = hexToRgba(color, 0.6);
   ctx.lineWidth = 1.5;
   ctx.fillStyle = hexToRgba(color, 0.06);
   roundRect(ctx, node.x, node.y, NODE_W, NODE_H + 16, NODE_R);
   ctx.fill();
   ctx.stroke();
-
   ctx.setLineDash([]);
 
-  // Label
-  ctx.fillStyle = hexToRgba('#e2e4eb', 0.7);
+  ctx.fillStyle = hexToRgba('#F5EDE6', 0.7);
   ctx.font = '400 10px "JetBrains Mono", monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
-  // Thinking icon
   ctx.fillStyle = hexToRgba(color, 0.7);
   ctx.font = '12px sans-serif';
   ctx.fillText('\u24d8', node.x + 10, node.y + NODE_H / 2 + 8);
 
-  ctx.fillStyle = hexToRgba('#e2e4eb', 0.6);
+  ctx.fillStyle = hexToRgba('#F5EDE6', 0.6);
   ctx.font = '400 10px "DM Sans", sans-serif';
   const label = (node.label || 'Reasoning').substring(0, 20);
   ctx.fillText(label, node.x + 28, node.y + NODE_H / 2 + 8);
@@ -395,120 +818,12 @@ function drawThinkingNode(ctx, node) {
   ctx.restore();
 }
 
-/**
- * Draw a chat bubble node near the responding node.
- */
-function drawChatBubble(ctx, sourceNode, chatText) {
-  if (!sourceNode || !chatText) return;
+// ================================================================
+// CASCADE TREE (for cascade_mapper mode)
+// ================================================================
 
-  const bubbleW = 200;
-  const bubbleH = 60;
-  const bubbleX = sourceNode.x + NODE_W + 20;
-  const bubbleY = sourceNode.y;
-
-  ctx.save();
-
-  // Bubble background
-  ctx.fillStyle = hexToRgba('#1e2030', 0.95);
-  ctx.strokeStyle = sourceNode.color || resolveColor('--accent');
-  ctx.lineWidth = 1;
-  roundRect(ctx, bubbleX, bubbleY, bubbleW, bubbleH, 8);
-  ctx.fill();
-  ctx.stroke();
-
-  // Connection line from node to bubble
-  ctx.beginPath();
-  ctx.moveTo(sourceNode.x + NODE_W, sourceNode.y + NODE_H / 2);
-  ctx.lineTo(bubbleX, bubbleY + bubbleH / 2);
-  ctx.strokeStyle = hexToRgba(sourceNode.color || resolveColor('--accent'), 0.3);
-  ctx.lineWidth = 1;
-  ctx.setLineDash([2, 2]);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Text
-  ctx.fillStyle = '#a0a3b1';
-  ctx.font = '400 10px "DM Sans", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-
-  const lines = wordWrap(chatText, 180, ctx);
-  lines.slice(0, 4).forEach((line, i) => {
-    ctx.fillText(line, bubbleX + 10, bubbleY + 10 + i * 14);
-  });
-
-  ctx.restore();
-}
-
-function wordWrap(text, maxWidth, ctx) {
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = words[0] || '';
-
-  for (let i = 1; i < words.length; i++) {
-    const testLine = currentLine + ' ' + words[i];
-    const metrics = ctx.measureText(testLine);
-    if (metrics.width > maxWidth && i > 0) {
-      lines.push(currentLine);
-      currentLine = words[i];
-    } else {
-      currentLine = testLine;
-    }
-  }
-  lines.push(currentLine);
-  return lines;
-}
-
-/**
- * Draw a cascade tree node with expandable branches.
- */
-function drawCascadeNode(ctx, node, level, index) {
-  const colors = {
-    0: '#6c8cff',  // Immediate
-    1: '#fbbf24',  // 2nd Order
-    2: '#f87171',  // 3rd Order
-    3: '#a07abb',  // Unexpected
-    4: '#34d399',  // Irreversible
-  };
-  const color = colors[level] || colors[0];
-
-  ctx.save();
-
-  // Tree node (smaller than regular nodes)
-  const tnW = 140;
-  const tnH = 36;
-  const tnR = 6;
-
-  ctx.fillStyle = hexToRgba(color, 0.12);
-  ctx.strokeStyle = hexToRgba(color, 0.5);
-  ctx.lineWidth = 1;
-  roundRect(ctx, node.x, node.y, tnW, tnH, tnR);
-  ctx.fill();
-  ctx.stroke();
-
-  // Level icon
-  ctx.fillStyle = color;
-  ctx.font = '10px sans-serif';
-  const icons = ['\u2460', '\u2461', '\u2462', '\u2606', '\u2716'];
-  ctx.fillText(icons[level] || '\u2460', node.x + 10, node.y + tnH / 2 + 4);
-
-  // Label
-  ctx.fillStyle = '#e2e4eb';
-  ctx.font = '400 10px "DM Sans", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const label = (node.label || '').substring(0, 18);
-  ctx.fillText(label, node.x + 28, node.y + tnH / 2);
-
-  ctx.restore();
-}
-
-/**
- * Render the full cascade tree layout.
- */
 export function renderCascadeTree(state) {
   if (!state.modeOutput || state.analysisMode !== 'cascade_mapper') return;
-
   const levels = state.modeOutput.levels || {};
   const canvas = document.getElementById('main-canvas');
   if (!canvas) return;
@@ -519,18 +834,16 @@ export function renderCascadeTree(state) {
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
 
-  const ctx = canvas.getContext('2d');
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const ctx2 = canvas.getContext('2d');
+  ctx2.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  const bgColor = resolveColor('--bg-primary');
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, rect.width, rect.height);
+  ctx2.clearRect(0, 0, rect.width, rect.height);
 
-  ctx.save();
-  ctx.translate(offsetX, offsetY);
-  ctx.scale(scale, scale);
+  ctx2.save();
+  ctx2.translate(offsetX, offsetY);
+  ctx2.scale(scale, scale);
 
-  const cx = rect.width / 2;
+  const cx2 = rect.width / 2;
   const levelLabels = ['Immediate', '2nd Order', '3rd Order', 'Unexpected', 'Irreversible'];
   const levelKeys = ['immediate', 'second_order', 'third_order', 'unexpected', 'irreversible'];
 
@@ -540,41 +853,75 @@ export function renderCascadeTree(state) {
     const count = Math.min(items.length, 5);
 
     items.slice(0, 5).forEach((item, i) => {
-      const x = cx + (i - (count - 1) / 2) * 150;
-      drawCascadeNode(ctx, {
-        x: x - 70,
+      const x2 = cx2 + (i - (count - 1) / 2) * 150;
+      drawCascadeNode(ctx2, {
+        x: x2 - 70,
         y: y,
         label: item.consequence || item.trigger || item.scenario || '',
       }, levelIdx, i);
 
-      // Draw connecting line down
       if (levelIdx < 4) {
-        ctx.beginPath();
-        ctx.moveTo(x, y + 36);
-        ctx.lineTo(x, y + 80);
-        ctx.strokeStyle = 'var(--border-strong)';
-        ctx.lineWidth = 0.5;
-        ctx.globalAlpha = 0.3;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx2.beginPath();
+        ctx2.moveTo(x2, y + 36);
+        ctx2.lineTo(x2, y + 80);
+        ctx2.strokeStyle = 'rgba(200, 149, 106, 0.15)';
+        ctx2.lineWidth = 0.5;
+        ctx2.stroke();
       }
     });
 
-    // Level label
-    ctx.fillStyle = '#6b6f7e';
-    ctx.font = '400 9px "JetBrains Mono", monospace';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(levelLabels[levelIdx], 80, y + 18);
+    ctx2.fillStyle = '#8A7068';
+    ctx2.font = '400 9px "JetBrains Mono", monospace';
+    ctx2.textAlign = 'right';
+    ctx2.textBaseline = 'middle';
+    ctx2.fillText(levelLabels[levelIdx], 80, y + 18);
   });
 
-  ctx.restore();
+  ctx2.restore();
   renderMinimap(state, rect.width, rect.height);
 }
 
-/**
- * Show the chat panel overlay on the canvas.
- */
+function drawCascadeNode(ctx, node, level, index) {
+  const colors = {
+    0: '#7AADCC',
+    1: '#D4A843',
+    2: '#C86B5A',
+    3: '#9B7DC8',
+    4: '#7DB88A',
+  };
+  const color = colors[level] || colors[0];
+  const tnW = 140;
+  const tnH = 36;
+  const tnR = 6;
+
+  ctx.save();
+
+  ctx.fillStyle = hexToRgba(color, 0.12);
+  ctx.strokeStyle = hexToRgba(color, 0.5);
+  ctx.lineWidth = 1;
+  roundRect(ctx, node.x, node.y, tnW, tnH, tnR);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = color;
+  ctx.font = '10px sans-serif';
+  const icons = ['\u2460', '\u2461', '\u2462', '\u2606', '\u2716'];
+  ctx.fillText(icons[level] || '\u2460', node.x + 10, node.y + tnH / 2 + 4);
+
+  ctx.fillStyle = '#F5EDE6';
+  ctx.font = '400 10px "DM Sans", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const label = (node.label || '').substring(0, 18);
+  ctx.fillText(label, node.x + 28, node.y + tnH / 2);
+
+  ctx.restore();
+}
+
+// ================================================================
+// CHAT PANEL (delegated to canvas module for overlay positioning)
+// ================================================================
+
 export function showChatPanel() {
   const panel = document.getElementById('chat-panel');
   if (panel) {
@@ -583,9 +930,6 @@ export function showChatPanel() {
   }
 }
 
-/**
- * Hide the chat panel overlay.
- */
 export function hideChatPanel() {
   const panel = document.getElementById('chat-panel');
   if (panel) {
@@ -594,9 +938,6 @@ export function hideChatPanel() {
   }
 }
 
-/**
- * Clear the chat panel messages.
- */
 export function clearChatPanel() {
   const messages = document.getElementById('chat-messages');
   if (messages) {
@@ -604,39 +945,5 @@ export function clearChatPanel() {
   }
 }
 
-export function initCanvas() {
-  const canvas = document.getElementById('main-canvas');
-  if (!canvas) return;
-
-  canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    if (e.deltaY < 0) zoomIn();
-    else zoomOut();
-  }, { passive: false });
-
-  let isPanning = false;
-  let startX, startY;
-
-  canvas.addEventListener('mousedown', (e) => {
-    isPanning = true;
-    startX = e.clientX - offsetX;
-    startY = e.clientY - offsetY;
-    canvas.style.cursor = 'grabbing';
-  });
-
-  canvas.addEventListener('mousemove', (e) => {
-    if (!isPanning) return;
-    offsetX = e.clientX - startX;
-    offsetY = e.clientY - startY;
-  });
-
-  canvas.addEventListener('mouseup', () => {
-    isPanning = false;
-    canvas.style.cursor = 'default';
-  });
-
-  canvas.addEventListener('mouseleave', () => {
-    isPanning = false;
-    canvas.style.cursor = 'default';
-  });
-}
+// Re-export for app.js that imports from store
+import { setState } from './store.js';

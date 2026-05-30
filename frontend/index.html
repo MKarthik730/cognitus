@@ -119,6 +119,50 @@
           </div>
         </div>
 
+        <!-- Cache Controls -->
+        <div class="panel-section">
+          <div class="section-header">
+            <span class="section-title">Cache</span>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="toggle-cache" checked />
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">Enable caching</span>
+            </label>
+            <button id="btn-clear-cache" class="btn-small">Clear</button>
+          </div>
+          <div id="cache-info" class="cache-info-text"></div>
+        </div>
+
+        <!-- RAG Toggle -->
+        <div class="panel-section">
+          <div class="section-header">
+            <span class="section-title">RAG</span>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="toggle-rag" checked />
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">Context slicing</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Enrichment Toggle -->
+        <div class="panel-section">
+          <div class="section-header">
+            <span class="section-title">Enrichment</span>
+          </div>
+          <div class="toggle-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="toggle-enrichment" checked />
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">External data</span>
+            </label>
+          </div>
+        </div>
+
         <!-- Assumption Excavator Results -->
         <div id="assumptions-section" class="panel-section hidden">
           <div class="section-header">
@@ -180,10 +224,18 @@
       </div>
     </aside>
 
+    <!-- RESIZER LEFT -->
+    <div id="resizer-left" class="resizer" data-resizer="left"></div>
+
     <!-- CENTER PANEL -->
     <main id="center-panel" class="panel-center">
       <div class="top-bar">
         <span id="mode-badge" class="mode-badge">Standard</span>
+        <!-- Streaming Indicator -->
+        <div id="streaming-indicator" class="streaming-indicator hidden">
+          <span class="streaming-dot"></span>
+          <span class="streaming-text">▶ Streaming</span>
+        </div>
         <!-- PII Redaction Banner -->
         <div id="pii-banner" class="pii-banner hidden">
           <span class="pii-banner-icon">&#x26A0;</span>
@@ -250,12 +302,31 @@
       </div>
     </main>
 
+    <!-- RESIZER RIGHT -->
+    <div id="resizer-right" class="resizer" data-resizer="right"></div>
+
     <!-- RIGHT PANEL -->
     <aside id="right-panel" class="panel-right">
       <div class="panel-right-inner">
         <div class="right-header">
           <span class="right-title">Analysis</span>
-          <button id="btn-rerun" class="btn-icon" title="Re-run Analysis">
+          <div class="right-header-actions">
+            <button id="btn-run-eval" class="btn-small" title="Run Eval Harness">Eval</button>
+            <div id="export-wrapper" style="position:relative">
+              <button id="btn-export" class="btn-icon" title="Export Analysis">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              </button>
+              <div id="export-dropdown" class="export-dropdown hidden">
+                <div class="dropdown-item" data-export-format="json">Export JSON</div>
+                <div class="dropdown-item" data-export-format="pdf">Export PDF</div>
+                <div class="dropdown-item" data-export-format="share">Share Link</div>
+              </div>
+            </div>
+            <button id="btn-rerun" class="btn-icon" title="Re-run Analysis">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <polyline points="23 4 23 10 17 10"/>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -461,6 +532,145 @@
         <button id="onboarding-back" class="btn-secondary hidden">Back</button>
         <button id="onboarding-next" class="btn-primary">Next</button>
         <button id="onboarding-skip" class="btn-ghost">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal-content settings-modal">
+      <div class="modal-header">
+        <span class="modal-title">Settings</span>
+        <button id="settings-modal-close" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- LLM Mode -->
+        <div class="settings-section">
+          <div class="settings-section-title">LLM Provider</div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Model</div>
+              <div class="settings-row-desc">Active language model provider</div>
+            </div>
+            <select id="settings-llm-mode" class="settings-select">
+              <option value="groq">Groq (Free)</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="ollama">Ollama (Local)</option>
+              <option value="browser">Browser (WebLLM)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">API Key</div>
+              <div class="settings-row-desc">Not stored on Cognitus servers</div>
+            </div>
+            <input id="settings-api-key" type="password" class="settings-input" placeholder="Enter API key..." />
+          </div>
+          <div class="settings-row" id="settings-groq-model-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Groq Model</div>
+              <div class="settings-row-desc">Which model to use via Groq</div>
+            </div>
+            <select id="settings-groq-model" class="settings-select"></select>
+          </div>
+        </div>
+
+        <!-- Display -->
+        <div class="settings-section">
+          <div class="settings-section-title">Display</div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Node labels</div>
+              <div class="settings-row-desc">Show role names instead of domain</div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-show-role-labels" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Minimap</div>
+              <div class="settings-row-desc">Show canvas minimap</div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-show-minimap" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Animations</div>
+              <div class="settings-row-desc">Node fade-in and streaming effects</div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-animations" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Analysis Defaults -->
+        <div class="settings-section">
+          <div class="settings-section-title">Analysis Defaults</div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Expert count</div>
+              <div class="settings-row-desc">Number of expert nodes to spawn</div>
+            </div>
+            <input id="settings-expert-count" type="number" class="settings-input" value="5" min="2" max="10" style="width:72px" />
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Max tokens</div>
+              <div class="settings-row-desc">Maximum response length per node</div>
+            </div>
+            <input id="settings-max-tokens" type="number" class="settings-input" value="2048" min="256" max="8192" step="256" style="width:80px" />
+          </div>
+        </div>
+
+        <!-- Privacy -->
+        <div class="settings-section">
+          <div class="settings-section-title">Privacy</div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">PII auto-redact</div>
+              <div class="settings-row-desc">Automatically redact personal info</div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-auto-redact" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Logging</div>
+              <div class="settings-row-desc">Enable client-side debug logging</div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="settings-debug-logging" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="settings-section" style="border-bottom:none">
+          <div class="settings-section-title">About</div>
+          <div class="settings-row">
+            <span class="settings-row-label">Version</span>
+            <span class="settings-row-value">1.0.0</span>
+          </div>
+          <div class="settings-row">
+            <span class="settings-row-label">LLM Provider</span>
+            <span id="settings-active-provider" class="settings-row-value">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="settings-reset-btn" class="btn-small">Reset Defaults</button>
+        <button id="settings-save-btn" class="btn-primary btn-small">Save Settings</button>
       </div>
     </div>
   </div>
