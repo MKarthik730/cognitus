@@ -5,7 +5,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,4 +59,34 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise credentials_exception
+    return user
+
+
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """Get the current user or return None if no valid token is provided.
+
+    Extracts the Bearer token from the Authorization header manually so this
+    dependency works without requiring authentication (unlike oauth2_scheme
+    which raises 401 automatically).
+    """
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return None
+    try:
+        token = authorization.split(" ")[1]
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        user_id = int(sub)
+    except (JWTError, ValueError, IndexError):
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        return None
     return user

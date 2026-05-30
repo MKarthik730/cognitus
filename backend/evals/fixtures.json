@@ -1,0 +1,87 @@
+[
+  {
+    "name": "medical_diagnosis",
+    "template": "medical",
+    "description": "A patient presents with unexplained symptoms after a tropical vacation",
+    "documents": [
+      "Patient is a 45-year-old male who returned from a 2-week trip to rural Thailand 10 days ago. He presents with fever (39.2°C), severe headache, myalgia, and a maculopapular rash on his trunk. Labs show thrombocytopenia (platelets 85,000), elevated liver enzymes (ALT 180, AST 210), and leukopenia (WBC 3.2). He reports mosquito bites during his stay. He took doxycycline for malaria prophylaxis but stopped 3 days early. No significant past medical history. Vital signs: BP 110/70, HR 102, RR 18, O2 sat 97%.",
+      "The patient denies any recent illnesses before travel, has no known drug allergies, and no history of liver disease. He consumed local street food and tap water during his stay. He did not receive any travel vaccines before the trip. His travel itinerary included Chiang Mai, Bangkok, and Koh Samui."
+    ],
+    "question": "What is the most likely diagnosis and what are the recommended next steps?",
+    "expected": {
+      "min_consensus": 0.5,
+      "required_findings": ["dengue", "fever", "thrombocytopenia"],
+      "forbidden_content": ["malaria", "doxycycline"],
+      "min_node_confidence": 0.3,
+      "synthesis_must_contain": ["dengue", "supportive care", "monitoring"]
+    }
+  },
+  {
+    "name": "detective_mystery",
+    "template": "detective",
+    "description": "A locked-room mystery involving a stolen artifact",
+    "documents": [
+      "On the morning of March 15th, the Nightshade Diamond was discovered missing from the Whitmore Museum's secure vault. The vault was locked at 9 PM the previous night by security guard Thomas Crane. At 8 AM the next day, museum curator Dr. Eleanor Vance found the vault door slightly ajar and the diamond missing. There were no signs of forced entry. The security camera system experienced a 12-minute gap between 2:47 AM and 2:59 AM. The only people with vault access codes were Thomas Crane, Dr. Vance, and museum director Harold Whitmore III. The museum's insurance policy on the diamond was renewed for $5 million exactly 30 days before the theft.",
+      "Thomas Crane has worked at the museum for 15 years with no prior incidents. He reported hearing a clicking sound around 2:50 AM but assumed it was the old HVAC system. Dr. Vance had recently returned from a sabbatical in Switzerland. Harold Whitmore III has significant gambling debts totaling approximately $3 million according to anonymous sources. The diamond's last appraisal (2 years ago) valued it at $3.8 million."
+    ],
+    "question": "Who is most likely responsible for the diamond theft and what is the motive?",
+    "expected": {
+      "min_consensus": 0.4,
+      "required_findings": ["insurance", "gambling debts", "camera gap"],
+      "forbidden_content": [],
+      "min_node_confidence": 0.3,
+      "synthesis_must_contain": ["motive", "opportunity", "financial"]
+    }
+  },
+  {
+    "name": "startup_funding",
+    "template": "startup",
+    "description": "A Series A startup with rapid growth but cash flow concerns",
+    "documents": [
+      "NovaTech Solutions, a B2B SaaS company, has grown from $500K ARR to $3.2M ARR in 18 months. They have 120 customers with a net dollar retention of 130%. Their burn rate is $220K/month with $1.8M in the bank. They're seeking a $6M Series A at a $30M pre-money valuation. Their top 3 customers represent 45% of revenue. CAC is $12K, LTV is $84K (7:1 LTV:CAC ratio). Churn rate is 2.5% monthly. The founding team has prior exits: CEO sold his last company for $15M, CTO was a senior engineer at Google.",
+      "The market is competitive with 3 well-funded competitors. NovaTech's product has a 4.8/5 rating on G2. They have 5 patents pending. Their sales cycle is 45 days on average. The team has grown from 5 to 35 employees in 12 months. Investor feedback has been positive but concerns exist about market size and concentration risk."
+    ],
+    "question": "Should the VC firm invest in NovaTech's Series A round, and at what terms?",
+    "expected": {
+      "min_consensus": 0.5,
+      "required_findings": ["ARR", "burn rate", "concentration"],
+      "forbidden_content": [],
+      "min_node_confidence": 0.3,
+      "synthesis_must_contain": ["valuation", "risk", "growth"]
+    }
+  },
+  {
+    "name": "legal_liability",
+    "template": "legal",
+    "description": "A product liability case involving an autonomous vehicle accident",
+    "documents": [
+      "On a rainy night in San Francisco, a Level 4 autonomous vehicle (manufactured by AeroDrive Inc.) struck a pedestrian who was crossing against the traffic signal in a crosswalk. The pedestrian suffered severe injuries. The vehicle was traveling at 28 mph in a 25 mph zone. The vehicle's black box data shows the LIDAR detected the pedestrian 2.3 seconds before impact but the braking decision was made only 0.8 seconds before impact due to a classification delay. AeroDrive's software update 3 weeks prior had modified the pedestrian classification algorithm to reduce false positives.",
+      "The pedestrian has a blood alcohol content of 0.12% at the hospital. The vehicle passed all regulatory safety tests. AeroDrive has a clause in its terms of service stating the driver (safety operator) retains ultimate responsibility. The safety operator in the vehicle was watching a video on their personal phone at the time of the accident. California law requires autonomous vehicles to follow all traffic laws and yields to pedestrians, even when jaywalking."
+    ],
+    "question": "Who bears primary liability for the accident?",
+    "expected": {
+      "min_consensus": 0.5,
+      "required_findings": ["liability", "autonomous", "pedestrian"],
+      "forbidden_content": [],
+      "min_node_confidence": 0.3,
+      "synthesis_must_contain": ["liability", "negligence", "responsibility"]
+    }
+  },
+  {
+    "name": "engineering_incident",
+    "template": "engineering",
+    "description": "A critical production outage at a major e-commerce platform",
+    "documents": [
+      "On Black Friday, MegaMart's e-commerce platform experienced a 47-minute complete outage during peak traffic (11:00 AM - 11:47 AM EST). Estimated revenue loss: $4.2M. The outage was triggered by a database connection pool exhaustion caused by a 10x traffic spike compared to projected capacity. The connection pool was configured with a max of 200 connections. Monitoring alerts were configured at 80% pool utilization but the on-call engineer was handling another incident and missed the alert.",
+      "The last database load test was conducted 6 months ago. The platform serves 50K requests/second at peak. The incident response runbook was outdated and didn't include connection pool scaling procedures. The team had deployed a new product recommendation feature 2 days prior which increased per-request database queries from 4 to 12. Post-incident analysis revealed the load balancer logs showed the cascade began with an unoptimized SQL query from the new feature."
+    ],
+    "question": "What were the root causes of the outage and what systemic changes should be implemented?",
+    "expected": {
+      "min_consensus": 0.5,
+      "required_findings": ["connection pool", "SQL", "load test"],
+      "forbidden_content": [],
+      "min_node_confidence": 0.3,
+      "synthesis_must_contain": ["capacity", "monitoring", "testing", "runbook"]
+    }
+  }
+]

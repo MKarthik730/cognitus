@@ -12,7 +12,6 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import async_session
-from app.graph.state import PipelineStatus
 from app.models.case_study_context import CaseStudyContext
 from app.models.case_study_node import CaseStudyNode
 from app.models.session import Session
@@ -20,7 +19,6 @@ from app.schemas.node_output import (
     NodeOutput,
     clean_json_response,
     confidence_to_level,
-    is_hallucinated,
 )
 from app.services.hf_service import HFService
 from app.services.llm_router import get_llm_router
@@ -28,6 +26,7 @@ from app.services.ghost_mode import GhostModeManager
 from app.services.redaction import RedactionAssistant
 from app.services.chat_router import ChatRouter
 from app.services.node_selector import NodeSelector
+from app.services.enrichment import run_enrichment_pipeline
 from app.graph.council_graph import CouncilGraph
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ router = APIRouter(tags=["websocket"])
 connected_clients: dict[str, list[WebSocket]] = {}
 
 # JSON schema appended to case study expert prompts
-CASE_STUDY_JSON_SCHEMA = """
+CASE_STUDY_JSON_SCHEMA = """\
 Respond ONLY in the following JSON schema. No preamble, no markdown fences, no explanation outside the JSON:
 {
     "confidence": <integer 0-100>,
@@ -54,6 +53,8 @@ CASE_STUDY_RETRY_PROMPT = (
     "Retry now, responding ONLY with the JSON object. "
     "No preamble, no markdown fences, no explanation."
 )
+
+# Streaming toggle is now stored per-connection on the EventSender instance
 
 
 async def get_redis() -> Redis:
@@ -170,6 +171,7 @@ class EventSender:
         self.redis = redis
         self.session_id = session_id
         self._counter: list[int] = [0]
+        self.streaming_enabled: bool = True  # Per-connection streaming state
 
     @property
     def last_event_id(self) -> int:
@@ -241,8 +243,45 @@ async def _generate_with_retry(
     system_prompt: str,
     user_prompt: str,
     max_tokens: int,
+    sender: EventSender | None = None,
+    node_name: str = "",
 ) -> tuple[dict[str, Any] | None, str]:
-    """Generate an LLM response and parse as JSON, with one retry on failure."""
+    """Generate an LLM response and parse as JSON, with one retry on failure.
+
+    If sender is provided and streaming is enabled, sends token events.
+    """
+
+    # Try streaming path first
+    if sender and sender.streaming_enabled:
+        try:
+            router = get_llm_router()
+            response = ""
+            async for token in router.stream(system_prompt, user_prompt, max_tokens=max_tokens):
+                response += token
+                if sender and node_name:
+                    await sender.send({
+                        "type": "node_token",
+                        "node": node_name,
+                        "token": token,
+                    })
+            model = router.get_model_name()
+
+            parsed = _parse_json_response(response)
+            if parsed is not None:
+                return parsed, model
+
+            # Retry without streaming on parse failure
+            logger.warning("JSON parse failed on streamed response, retrying without streaming...")
+            response2, model2 = await llm_service.generate(system_prompt, user_prompt, max_tokens=max_tokens)
+            parsed2 = _parse_json_response(response2)
+            if parsed2 is not None:
+                return parsed2, model2
+            return None, model2
+
+        except Exception as e:
+            logger.warning("Streaming failed, falling back: %s", e)
+
+    # Non-streaming path
     response, model = await llm_service.generate(system_prompt, user_prompt, max_tokens=max_tokens)
 
     parsed = _parse_json_response(response)
@@ -267,6 +306,7 @@ async def _handle_case_study(
     guiding_question: str,
     case_context: str,
     ghost_level: str = "off",
+    template: str = "general",
 ) -> None:
     llm_service = HFService()
     ghost_mgr = GhostModeManager()
@@ -285,6 +325,26 @@ async def _handle_case_study(
         context, redactions = await redactor.redact(context)
         if redactions:
             await sender.send({"type": "pii_redactions", "redactions": redactions})
+
+    # --- Enrichment Pipeline ---
+    if settings.ENRICHMENT_ENABLED and settings.TAVILY_API_KEY:
+        try:
+            await sender.send({"type": "enrichment_status", "status": "extracting_entities"})
+            enriched = await run_enrichment_pipeline(context, guiding_question, template)
+            await sender.send({"type": "enrichment_status", "status": "fetching_web_context"})
+
+            if enriched.get("web_data"):
+                await sender.send({
+                    "type": "enrichment_complete",
+                    "entities": enriched.get("entities", {}),
+                    "web_count": len(enriched.get("web_data", [])),
+                    "domain_count": len(enriched.get("domain_data", [])),
+                })
+
+            if enriched.get("assembled_context"):
+                context = enriched["assembled_context"]
+        except Exception as e:
+            logger.warning("Enrichment pipeline failed, using raw context: %s", e)
 
     if len(context) > 6000:
         try:
@@ -331,6 +391,8 @@ async def _handle_case_study(
             system_prompt,
             user_prompt,
             max_tokens=settings.HF_EXPERT_MAX_TOKENS,
+            sender=sender,
+            node_name=name,
         )
 
     raw_results = await asyncio.gather(*expert_tasks.values(), return_exceptions=True)
@@ -417,6 +479,63 @@ async def _handle_case_study(
 
     await sender.send({"type": "case_cross_check", "data": cross_check_data})
 
+    # --- Cross-Examination Phase ---
+    await sender.send({"type": "case_cross_examine", "status": "cross_examining"})
+    cross_examine_results: dict[str, Any] = {}
+    from app.schemas.node_output import CrossExamineOutput
+
+    for name, data in experts.items():
+        other_positions = "\n".join(
+            f"=== {other_name} ===\n"
+            f"Position: {other_data.get('position', '')}\n"
+            f"Reasoning: {other_data.get('reasoning', '')[:300]}"
+            for other_name, other_data in experts.items()
+            if other_name != name
+        )
+
+        cross_examine_prompt = f"""\
+You are being cross-examined by your peers. Review the following positions from other experts
+and respond to their critiques. Maintain your position only if the evidence supports it.
+
+Your original position: {data.get('position', '')}
+Your original reasoning: {data.get('reasoning', '')}
+
+Other experts' positions:
+{other_positions}
+
+Respond ONLY with JSON:
+{{
+    "maintains_position": true/false,
+    "revision": "<revised position if changed, otherwise null>",
+    "points_of_agreement": ["<point of agreement 1>", ...],
+    "points_of_disagreement": ["<point of disagreement 1>", ...]
+}}
+"""
+        try:
+            ce_response, _ = await llm_service.generate(
+                "You are being cross-examined. Respond professionally and concisely.",
+                cross_examine_prompt,
+                max_tokens=512,
+            )
+            ce_cleaned = clean_json_response(ce_response)
+            ce_data = json.loads(ce_cleaned)
+            ce_validated = CrossExamineOutput(**ce_data)
+            cross_examine_results[name] = ce_validated.model_dump()
+        except Exception as e:
+            logger.warning("Cross-examination failed for %s: %s", name, e)
+            cross_examine_results[name] = {
+                "maintains_position": True,
+                "revision": None,
+                "points_of_agreement": [],
+                "points_of_disagreement": [],
+            }
+
+        await sender.send({
+            "type": "case_cross_examine_result",
+            "domain": name,
+            "data": cross_examine_results[name],
+        })
+
     # Synthesis
     await sender.send({"type": "case_synthesize", "status": "synthesizing"})
 
@@ -424,7 +543,7 @@ async def _handle_case_study(
         synth_response, _ = await llm_service.generate(
             "You are a neutral synthesizer. Combine all expert analyses into a coherent final assessment. "
             "Respond with a JSON object: {\"verdict\": \"<string>\", \"reasoning\": \"<string>\", \"confidence\": \"<high|medium|low>\", \"consensus_score\": <0.0-1.0>, \"critical_findings\": [\"<string>\"], \"recommendations\": [\"<string>\"], \"unresolved_disagreements\": [\"<string>\"]}",
-            f"Guiding Question: {guiding_question or 'N/A'}\n\nExpert Analyses:\n{expert_summaries}\n\nCross-check:\n{cross_check_data.get('analysis', '')}\n\nProvide a synthesis.",
+            f"Guiding Question: {guiding_question or 'N/A'}\n\nExpert Analyses:\n{expert_summaries}\n\nCross-check:\n{cross_check_data.get('analysis', '')}\n\nCross-examination results:\n{json.dumps(cross_examine_results, indent=2)}\n\nProvide a synthesis.",
             max_tokens=settings.HF_SYNTHESIS_MAX_TOKENS,
         )
         synth_parsed = _parse_json_response(synth_response)
@@ -452,6 +571,7 @@ async def _handle_case_study(
             "data": {
                 "experts": experts,
                 "crossCheck": cross_check_data,
+                "crossExamine": cross_examine_results,
                 "synthesis": synthesis_data,
             },
         }
@@ -553,6 +673,7 @@ async def _stream_graph_events(
                         "concerns": output.get("concerns", []),
                         "confidence_score": output.get("confidence_score"),
                         "model_used": output.get("model_used", ""),
+                        "cached": output.get("cached", False),
                     },
                 }
             )
@@ -571,6 +692,45 @@ async def _stream_graph_events(
         }
     )
 
+    # --- Cross-Examination Phase ---
+    await on_node_start("cross_examine", "cross_examining")
+    from app.agents.expert_node import ExpertNode as ExpertNodeCls
+    cross_examine_results: dict[str, Any] = {}
+    ce_tasks = []
+    for domain, expert_data in experts.items():
+        node = ExpertNodeCls(domain, council_graph.hf_service)
+        ce_tasks.append(
+            node.cross_examine(
+                position=expert_data.get("position", ""),
+                reasoning=expert_data.get("reasoning", ""),
+                other_experts=experts,
+            )
+        )
+    ce_results = await asyncio.gather(*ce_tasks, return_exceptions=True)
+    for domain, result in zip(experts.keys(), ce_results):
+        if isinstance(result, Exception):
+            cross_examine_results[domain] = {
+                "maintains_position": True,
+                "revision": None,
+                "points_of_agreement": [],
+                "points_of_disagreement": [],
+                "error": str(result),
+            }
+        elif result is not None:
+            cross_examine_results[domain] = result.model_dump()
+        else:
+            cross_examine_results[domain] = {
+                "maintains_position": True,
+                "revision": None,
+                "points_of_agreement": [],
+                "points_of_disagreement": [],
+            }
+        await sender.send({
+            "type": "cross_examine_result",
+            "domain": domain,
+            "data": cross_examine_results[domain],
+        })
+
     await on_node_start("synthesizer", "synthesizing")
     synthesis_output = await synthesizer_node.synthesize(
         situation, experts, cross_check_output
@@ -587,6 +747,7 @@ async def _stream_graph_events(
                 "minority_report": synthesis_output.get("minority_report", ""),
                 "what_would_change_my_mind": synthesis_output.get("what_would_change_my_mind", []),
                 "confidence_breakdown": synthesis_output.get("confidence_breakdown", {}),
+                "cross_examine": cross_examine_results,
             },
             "status": "completed",
         }
@@ -606,6 +767,7 @@ async def _stream_graph_events(
                         "reasoning": e.get("reasoning"),
                         "key_findings": e.get("key_findings"),
                         "concerns": e.get("concerns"),
+                        "cached": e.get("cached", False),
                     }
                     for d, e in experts.items()
                 ],
@@ -618,6 +780,7 @@ async def _stream_graph_events(
                 "minority_report": synthesis_output.get("minority_report", ""),
                 "what_would_change_my_mind": synthesis_output.get("what_would_change_my_mind", []),
                 "confidence_breakdown": synthesis_output.get("confidence_breakdown", {}),
+                "cross_examine": cross_examine_results,
             },
         }
     )
@@ -657,6 +820,12 @@ async def websocket_endpoint(
                 await sender.send({"type": "error", "message": "Redis unavailable, cannot replay events"})
             return
 
+        # --- Handle streaming toggle (per-connection) ---
+        if data.get("type") == "set_streaming":
+            sender.streaming_enabled = data.get("enabled", True)
+            await sender.send({"type": "streaming_toggle", "enabled": sender.streaming_enabled})
+            return
+
         # --- Clear old event history for a fresh analysis ---
         if redis is not None:
             try:
@@ -671,6 +840,7 @@ async def websocket_endpoint(
             nodes = data.get("nodes", [])
             guiding_question = data.get("guidingQuestion", "")
             case_context = data.get("caseContext", "")
+            template = data.get("template", "general")
             # Persist case study nodes and context to DB
             try:
                 async with async_session() as db:
@@ -716,7 +886,7 @@ async def websocket_endpoint(
                         await db.commit()
             except Exception as e:
                 logger.warning("Failed to persist case study data: %s", e)
-            await _handle_case_study(sender, nodes, guiding_question, case_context)
+            await _handle_case_study(sender, nodes, guiding_question, case_context, template=template)
             return
 
         # --- Handle chat message (post-analysis conversation) ---
@@ -764,10 +934,13 @@ async def websocket_endpoint(
         user_id = data.get("user_id", 0)
         analysis_mode = data.get("analysis_mode", "standard")
         ghost_level = data.get("ghost_level", "off")
+        enable_streaming = data.get("streaming_enabled", True)
 
         if not situation:
             await sender.send({"type": "error", "message": "situation is required"})
             return
+
+        sender.streaming_enabled = enable_streaming
 
         # Ghost Mode override: Void → force Local, Phantom → force Browser
         ghost_mgr = GhostModeManager()

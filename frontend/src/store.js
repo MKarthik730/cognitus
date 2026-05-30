@@ -51,8 +51,50 @@ let state = {
   situationDna: null,
   thinkingSteps: [],
 
+  // === NEW FEATURE STATE ===
+
+  // Task 4 - Token Streaming
+  streamingNodes: {},        // { nodeName: { tokens: string, active: bool } }
+  streamingActive: false,
+
+  // Task 5 - Result Caching
+  cacheEnabled: true,
+  cacheHits: {},             // { domain: true }
+  cacheInfo: null,           // { hits: N, misses: N, keys: [...] }
+
+  // Task 6 - RAG Context Slicing
+  ragEnabled: true,
+  ragStatus: 'idle',         // idle | chunking | embedding | ready | error
+  chunkCount: 0,
+  embeddingStatus: null,
+
+  // Task 7 - Cross-Examination (extended)
+  crossCheckResult: null,    // full cross-check data object
+  crossCheckStep: null,      // which step we're on
+
+  // Task 9 - Data Enrichment
+  enrichmentEnabled: true,
+  enrichmentStatus: 'idle',  // idle | fetching | enriching | done | error
+  enrichmentData: null,
+
+  // Task 10 - Interactive Canvas
+  selectedNode: null,        // clicked node for detail view
+  tooltipData: null,         // { x, y, content }
+
+  // Task 11 - Export
+  exportFormat: 'json',      // json | pdf | share
+  exportLoading: false,
+
+  // Task 12 - Eval Harness
+  evalRunning: false,
+  evalResults: null,
+
+  // Groq API
+  groqApiKey: localStorage.getItem('cognitus_groq_key') || '',
+  groqModel: 'llama-3.3-70b',
+
   // Onboarding
-  onboardingStep: null, // null | 'mode' | 'key' | 'template' | 'complete'
+  onboardingStep: null,
   onboardingMode: null,
 
   // Legacy case study
@@ -110,6 +152,17 @@ export function resetState() {
     agreements: [],
     consensusScore: 0.5,
     synthesis: null,
+    streamingNodes: {},
+    streamingActive: false,
+    crossCheckResult: null,
+    crossCheckStep: null,
+    cacheHits: {},
+    cacheInfo: null,
+    enrichmentStatus: 'idle',
+    enrichmentData: null,
+    selectedNode: null,
+    tooltipData: null,
+    thinkingSteps: [],
   });
 }
 
@@ -137,19 +190,16 @@ export function handleWsEvent(event) {
       break;
 
     case 'resume_start':
-      // Backend is about to replay missed events after reconnect
       s.connectionStatus = 'reconnecting';
       s.isReconnecting = true;
       break;
 
     case 'resume_complete':
-      // Backend has finished replaying events
       s.connectionStatus = 'connected';
       s.isReconnecting = false;
       break;
 
     case 'partial_results':
-      // Backend sent partial node results from a previous session
       if (event.data) {
         const partials = event.data;
         const existingExperts = [...s.experts];
@@ -184,6 +234,134 @@ export function handleWsEvent(event) {
 
     case 'node_start':
       s.activeNode = event.node;
+      // Initialize streaming state for this node
+      if (event.node && !event.node.startsWith('case_')) {
+        s.streamingNodes = {
+          ...s.streamingNodes,
+          [event.node]: { tokens: '', active: true },
+        };
+        s.streamingActive = true;
+      }
+      break;
+
+    // === TASK 4: Token Streaming ===
+    case 'token':
+      if (event.node && event.token) {
+        const existing = s.streamingNodes[event.node] || { tokens: '', active: true };
+        s.streamingNodes = {
+          ...s.streamingNodes,
+          [event.node]: {
+            ...existing,
+            tokens: existing.tokens + event.token,
+            active: true,
+          },
+        };
+        s.streamingActive = true;
+      }
+      break;
+
+    case 'stream_end':
+      if (event.node) {
+        const existing = s.streamingNodes[event.node];
+        if (existing) {
+          s.streamingNodes = {
+            ...s.streamingNodes,
+            [event.node]: { ...existing, active: false },
+          };
+        }
+        // Check if any streams remain active
+        const anyActive = Object.values(s.streamingNodes).some(n => n.active);
+        s.streamingActive = anyActive;
+      }
+      break;
+
+    // === TASK 5: Result Caching ===
+    case 'cache_hit':
+      if (event.domain) {
+        s.cacheHits = { ...s.cacheHits, [event.domain]: true };
+      }
+      break;
+
+    case 'cache_miss':
+      if (event.domain) {
+        s.cacheHits = { ...s.cacheHits, [event.domain]: false };
+      }
+      break;
+
+    case 'cache_info':
+      s.cacheInfo = {
+        hits: event.hits || 0,
+        misses: event.misses || 0,
+        keys: event.keys || [],
+      };
+      break;
+
+    // === TASK 6: RAG Context Slicing ===
+    case 'rag_status':
+      s.ragStatus = event.status || 'idle';
+      if (event.chunk_count !== undefined) s.chunkCount = event.chunk_count;
+      if (event.embedding_status) s.embeddingStatus = event.embedding_status;
+      break;
+
+    // === TASK 7: Cross-Examination ===
+    case 'cross_check_start':
+      s.crossCheckStep = 'checking';
+      s.activeNode = 'cross_check';
+      break;
+
+    case 'cross_check_complete':
+      if (event.data) {
+        s.crossCheckResult = event.data;
+        s.contradictions = event.data.contradictions ?? [];
+        s.agreements = event.data.agreements ?? [];
+        s.consensusScore = event.data.consensus_score ?? 0.5;
+        s.crossCheckStep = 'done';
+        s.activeNode = null;
+      }
+      break;
+
+    case 'cross_examine_start':
+      s.crossCheckStep = 'cross_examining';
+      break;
+
+    case 'cross_examine_complete':
+      if (event.data) {
+        s.crossCheckResult = {
+          ...(s.crossCheckResult || {}),
+          crossExamination: event.data,
+        };
+        s.crossCheckStep = 'cross_examined';
+      }
+      break;
+
+    // === TASK 9: Data Enrichment ===
+    case 'enrichment_status':
+      s.enrichmentStatus = event.status || 'idle';
+      if (event.data) s.enrichmentData = event.data;
+      break;
+
+    // === TASK 12: Eval Harness ===
+    case 'eval_start':
+      s.evalRunning = true;
+      s.evalResults = null;
+      break;
+
+    case 'eval_progress':
+      if (event.results) {
+        s.evalResults = event.results;
+      }
+      break;
+
+    case 'eval_complete':
+      s.evalRunning = false;
+      if (event.results) {
+        s.evalResults = event.results;
+      }
+      break;
+
+    case 'eval_error':
+      s.evalRunning = false;
+      s.error = event.error || 'Eval failed';
       break;
 
     case 'node_complete':
@@ -191,12 +369,16 @@ export function handleWsEvent(event) {
         s.domains = event.data.domains;
         s.distributor = event.data;
         s.activeNode = null;
+        // Close streaming for distributor
+        s.streamingNodes['distributor'] = { tokens: '', active: false };
       }
       if (event.node === 'cross_check' && event.data) {
         s.contradictions = event.data.contradictions ?? [];
         s.agreements = event.data.agreements ?? [];
         s.consensusScore = event.data.consensus_score ?? 0.5;
+        s.crossCheckResult = event.data;
         s.activeNode = null;
+        s.streamingNodes['cross_check'] = { tokens: '', active: false };
       }
       if (event.node === 'synthesizer' && event.data) {
         s.synthesis = {
@@ -206,6 +388,8 @@ export function handleWsEvent(event) {
           consensus_score: event.data.consensus_score ?? 0.5,
         };
         s.activeNode = null;
+        s.streamingNodes['synthesizer'] = { tokens: '', active: false };
+        s.streamingActive = false;
       }
       break;
 
@@ -221,11 +405,16 @@ export function handleWsEvent(event) {
             processing_time_ms: 0,
           },
         ];
+        // Close streaming for this expert
+        s.streamingNodes[event.domain] = { tokens: '', active: false };
       }
       break;
 
     case 'expert_error':
       s.error = `Expert ${event.domain} failed: ${event.error}`;
+      if (event.domain) {
+        s.streamingNodes[event.domain] = { tokens: '', active: false };
+      }
       break;
 
     case 'case_node_start':
@@ -235,6 +424,10 @@ export function handleWsEvent(event) {
         analysisStatus: event.status || 'analyzing',
         step: event.status || 'analyzing',
       };
+      if (event.node) {
+        s.streamingNodes[event.node] = { tokens: '', active: true };
+        s.streamingActive = true;
+      }
       break;
 
     case 'case_expert_complete':
@@ -259,6 +452,9 @@ export function handleWsEvent(event) {
             ],
           },
         };
+        if (event.domain) {
+          s.streamingNodes[event.domain] = { tokens: '', active: false };
+        }
       }
       break;
 
@@ -300,6 +496,7 @@ export function handleWsEvent(event) {
     case 'case_complete':
       s.status = 'completed';
       s.activeNode = null;
+      s.streamingActive = false;
       s.caseStudy = {
         ...s.caseStudy,
         analysisStatus: 'completed',
@@ -307,7 +504,7 @@ export function handleWsEvent(event) {
       if (event.data) {
         if (event.data.synthesis) {
           s.synthesis = {
-            verdict: event.data.synthesis.verdict || event.data.synthesis.verdict || '',
+            verdict: event.data.synthesis.verdict || '',
             reasoning: event.data.synthesis.reasoning || '',
             confidence: event.data.synthesis.confidence || 'medium',
             consensus_score: event.data.crossCheck?.consensus_score || 0.5,
@@ -332,6 +529,7 @@ export function handleWsEvent(event) {
       if (event.data) {
         s.status = 'completed';
         s.activeNode = null;
+        s.streamingActive = false;
         s.synthesis = {
           verdict: event.verdict ?? event.data?.verdict ?? '',
           reasoning: event.synthesis_reasoning ?? event.data?.synthesis_reasoning ?? '',
@@ -341,6 +539,10 @@ export function handleWsEvent(event) {
         s.consensusScore = event.consensus_score ?? event.data?.consensus_score ?? 0.5;
         s.contradictions = event.contradictions ?? event.data?.contradictions ?? [];
         s.agreements = event.agreements ?? event.data?.agreements ?? [];
+        // Close any remaining streaming nodes
+        Object.keys(s.streamingNodes).forEach(k => {
+          s.streamingNodes[k] = { ...s.streamingNodes[k], active: false };
+        });
       }
       break;
 
@@ -415,6 +617,7 @@ export function handleWsEvent(event) {
       s.status = 'failed';
       s.activeNode = null;
       s.nodesLoading = false;
+      s.streamingActive = false;
       break;
   }
   setState(s);
