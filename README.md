@@ -11,7 +11,7 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ## Architecture
 
-![Cognitus Architecture](./architecture.svg)
+![Cognitus Architecture](./docs/architecture.svg)
 
 ## Pipeline
 
