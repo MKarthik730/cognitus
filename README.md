@@ -15,7 +15,7 @@ Everything streams to an animated canvas graph via WebSocket.
 
 ## Pipeline
 
-![Cognitus Pipeline](./pipeline.svg)
+![Cognitus Pipeline](./docs/pipeline.svg)
 
 ### Pipeline Flow
 
