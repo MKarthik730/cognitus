@@ -1,193 +1,268 @@
 # Cognitus
 
-> Multi-perspective AI reasoning platform powered by HuggingFace LLMs — with full Case Study Mode.
+> Multi-perspective AI reasoning platform — parallel expert agents, structured JSON analysis, and real-time streaming canvas.
 
 Cognitus operates in two modes:
 
-- **Standard Mode** — Type a question and get analysis from dynamically selected AI expert agents in real time.
-- **Case Study Mode** — Upload real case files (PDFs, images, documents), define custom expert nodes with tailored behaviors, and run a grounded multi-agent analysis on the uploaded content.
+- **Standard Mode** — Ask a question; the system dynamically selects 3–5 domain expert agents, decomposes the question into sub-problems, runs parallel analysis, cross-checks for contradictions, and synthesises a forced-commitment verdict.
+- **Case Study Mode** — Upload real files (PDF, DOCX, images, CSV), define custom expert nodes with tailored system prompts, and run a fully grounded multi-agent analysis on the uploaded content.
 
-Everything streams to an animated canvas graph via WebSocket.
+Everything streams to an animated canvas graph over WebSocket in real time.
+
+
 
 ## Architecture
 
-![Cognitus Architecture](./architecture.svg)
+![Cognitus Architecture](./docs/architecture.svg)
 
 ## Pipeline
 
 ![Cognitus Pipeline](./docs/pipeline.svg)
 
-### Pipeline Flow
 
-1. **Case Decomposer** — The Distributor breaks the situation into 3–5 specific, independent sub-questions, each assigned to a domain
-2. **Expert Nodes** — Each expert receives their *specific sub-question* plus the full situation as context, producing focused, non-overlapping analyses
-3. **Cross-Check** — Identifies contradictions and agreements between experts
-4. **Synthesis** — Forced commitment: picks ONE primary recommendation, no hedging
 
-### WebSocket Resilience
+---
 
-- **Auto-reconnect** — Frontend retries with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts)
-- **Event History** — Last 100 events per session stored in Redis (10min TTL)
-- **Resume on Reconnect** — Missed events are replayed; partial node results recovered
-- **In-memory Rate Limiter** — Falls back when Redis is unavailable (single-process only)
+---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| LLM Provider | HuggingFace Inference API (Router) |
+|---|---|
+| LLM Provider | Pluggable: HuggingFace · Groq · Anthropic · OpenRouter · Ollama |
 | Backend | FastAPI + Uvicorn + WebSockets |
 | Frontend | Vanilla JS + Canvas API + Vite |
-| Document Extraction | PDF.js (browser), mammoth.js (browser), PyMuPDF (server), python-docx (server) |
-| Database | PostgreSQL 16 (async via asyncpg) |
+| Document Extraction | PDF.js (browser) · mammoth.js (browser) · PyMuPDF (server) · python-docx (server) |
+| Database | PostgreSQL 16 + pgvector (async via asyncpg) |
 | ORM | SQLAlchemy 2.0 async |
 | Cache | Redis 7 |
 | Auth | JWT + bcrypt |
+| Embeddings | sentence-transformers all-MiniLM-L6-v2 (local) |
 | Container | Docker + Docker Compose |
+
+---
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 20+
-- Docker & Docker Compose (optional, for postgres/redis)
-- HuggingFace API token ([get one free](https://huggingface.co/settings/tokens))
+- Docker & Docker Compose
+- At least one LLM provider API key (see [LLM Providers](#llm-providers))
+
+---
 
 ## Quick Start
 
 ```bash
-# Clone and enter
+# Clone
 git clone https://github.com/MKarthik730/cognitus.git
 cd cognitus
-git checkout case-study
 
 # Environment
 cp .env.example .env
-# Edit .env with your HF_API_TOKEN and a SECRET_KEY
+# Edit .env — set at minimum: LLM_PROVIDER + the matching API key
 
-# Start everything with Docker
+# Start everything
 docker compose up --build
 ```
 
-### Manual Development Setup
+Frontend: http://localhost:5173  
+Backend API: http://localhost:8000  
+API docs: http://localhost:8000/docs
+
+---
+
+## Manual Development Setup
 
 ```bash
 # Backend
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r backend/requirements.txt
-pip install PyMuPDF python-docx   # for file extraction
+pip install PyMuPDF python-docx  # file extraction
+pip install sentence-transformers # RAG (requires PyTorch ~800MB)
 
 # Frontend
-cd frontend
-npm install
-cd ..
+cd frontend && npm install && cd ..
 
-# Start infrastructure (or set REDIS_URL / DATABASE_URL to skip)
+# Infrastructure
 docker compose up -d postgres redis
 
-# Run backend (port 8000)
+# Backend (port 8000)
 uvicorn backend.main:app --reload --port 8000
 
-# Run frontend (separate terminal, port 5173)
+# Frontend (port 5173)
 cd frontend && npm run dev
 ```
 
-> **Note:** The backend starts without Redis/Postgres — it logs a warning and runs in standalone mode for WebSocket testing.
+> The backend starts without Redis/Postgres — it logs a warning and runs in standalone mode for WebSocket testing.
 
-## Case Study Mode — Feature Details
+---
 
-### File Upload & Extraction
+## LLM Providers
 
-Switch to the **Case Study** tab in the left panel to access the file drop zone.
+Set `LLM_PROVIDER` in `.env` to one of:
 
-| File Type | Extraction Method |
-|-----------|------------------|
-| PDF | PDF.js in-browser, PyMuPDF on server |
-| DOCX | mammoth.js in-browser, python-docx on server |
-| PNG / JPG / WEBP | Base64 → HF Inference API for description |
+| Value | Model default | Required env var |
+|---|---|---|
+| `huggingface` | Llama-3.2-1B-Instruct | `HF_API_TOKEN` |
+| `groq` | llama3-8b-8192 | `GROQ_API_KEY` |
+| `anthropic` | claude-3-haiku-20240307 | `ANTHROPIC_API_KEY` |
+| `openrouter` | any (passthrough) | `OPENROUTER_API_KEY` |
+| `ollama` | configurable | `OLLAMA_BASE_URL` |
+
+The provider/model can also be switched at runtime from the Settings panel in the frontend (stored in `localStorage`).
+
+**HuggingFace fallback chain:** `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
+
+---
+
+## Features
+
+### Standard Mode
+
+The Distributor breaks the question into 3–5 domain-specific sub-questions. The Node Selector (LLM call) picks expert roles on the fly — roles appear in the left panel with a staggered fade-in. Each expert receives their sub-question plus full context and responds as structured JSON (`NodeOutput` schema). On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist.
+
+### Case Study Mode
+
+Switch to the **Case Study** tab to access the file drop zone.
+
+**Supported file types:**
+
+| Type | Extraction |
+|---|---|
+| PDF | PDF.js (browser) + PyMuPDF (server) |
+| DOCX | mammoth.js (browser) + python-docx (server) |
+| PNG / JPG / WEBP | Base64 → LLM image description |
 | MD / TXT / CSV | FileReader API as plain text |
 
-- Multiple files allowed
-- Per-file extraction status (spinner → ready/failed)
-- Failed files show retry button, excluded from analysis
+Multiple files allowed. Per-file extraction status (spinner → ready / failed). Failed files show a retry button and are excluded from analysis.
 
-### Node Builder
+**Context pipeline:**
 
-Define 2–6 custom expert nodes with:
+1. Assemble — concatenate all ready file contents
+2. Estimate — if total > 6000 chars, run per-file summarisation
+3. Compress — if still > 10 000 chars, run global compression pass
+4. RAG slice — chunk, embed (all-MiniLM-L6-v2), store in pgvector; each expert node retrieves its top-5 relevant chunks via cosine similarity before LLM call
+5. Inject — each node receives a `CASE_CONTEXT` string
 
-- **Name** — Displayed in graph and panels
-- **Role** — One-line description
-- **Behavior** — Full system prompt controlling reasoning style
-- **Color** — Pick from 8 preset colors per node
-- **Collapse / Expand** — Toggle to show only the name
-- **Duplicate** — Clone a node with "(copy)" suffix
-- **Reorder** — Via drag handle
-- **Delete** — Disabled when only 2 nodes remain
+A banner appears when context was condensed: *"Case files condensed to fit analysis limits."*
 
-### Preset Templates
+**Node Builder:**
+
+Define 2–6 custom expert nodes with name, role, behavior (system prompt), and color. Supports collapse/expand, duplicate, reorder (drag handle), and delete (disabled at 2 nodes).
+
+**Preset templates:**
 
 | Template | Nodes |
-|----------|-------|
+|---|---|
 | Medical Team | Cardiologist, Intensivist, Pharmacologist, Risk Assessor |
 | Detective Squad | Evidence Analyst, Forensic Pathologist, Psychologist, Legal Advisor |
 | Startup Review | Investor, CFO, Market Analyst, Devil's Advocate |
 | Legal Panel | Prosecution, Defense Counsel, Forensic Expert, Judge |
 | Engineering Review | Backend Engineer, Security Analyst, DevOps Lead, QA Engineer |
-| Custom | Starts with 2 empty node slots |
+| Custom | 2 empty node slots |
 
-Each preset ships with detailed behavior prompts that control how the expert reasons.
+### JSON Parsing + Hallucination Detection
 
-### Context Pipeline
+All node responses are parsed as structured JSON against the `NodeOutput` Pydantic schema:
 
-After extraction, before analysis:
+```python
+class NodeOutput(BaseModel):
+    confidence: int          # 0–100
+    position: str
+    reasoning: str
+    key_findings: list[str]
+    concerns: list[str]
+    revision: str | None
+```
 
-1. **Assemble** — Concatenate all ready file contents
-2. **Estimate** — If total > 6000 chars (~1500 tokens), run per-file summarization via HF model
-3. **Compress** — If still > 10000 chars, run global compression pass
-4. **Inject** — All nodes receive the same `CASE_CONTEXT` string
+Pipeline: strip markdown fences → `json.loads()` → `NodeOutput(**parsed)` → hallucination check → on failure, re-prompt once → on second failure, mark node as `error` and exclude from synthesis.
 
-> ℹ A banner appears when context was condensed: *"Case files condensed to fit analysis limits."*
+The `is_hallucinated()` check flags placeholder patterns and enforces a minimum reasoning length.
 
-### Node Execution
+### Token Streaming
 
-All nodes run in parallel. Each receives:
-- Their **behavior** system prompt
-- The **case context**
-- Their **specific sub-question** (from the case decomposer)
-- The **guiding question** (optional)
+When enabled (Settings panel toggle, stored in `localStorage`):
 
-Each response is parsed as **structured JSON** matching a Pydantic `NodeOutput` schema (`confidence`, `position`, `reasoning`, `key_findings`, `concerns`). Responses with markdown fences are auto-cleaned, validated, and hallucination-checked before acceptance.
+- Backend yields tokens from the LLM as they arrive, sending `node_token` WebSocket events every 50ms
+- Canvas shows a pulsing border glow and live character count inside each node circle while streaming
+- On `node_complete`, the full structured JSON is parsed and rendered
 
-On JSON parse failure, the node is re-prompted once. If both attempts fail, the node is marked as error and excluded from synthesis.
+### Cross-Examination
 
-### Output
+After the first parallel expert round, a cross-examination pass runs before synthesis:
 
-**Verdict tab:** Verdict card with confidence pill · Consensus meter (0–100% gradient) · Critical Findings · Unresolved Disagreements · Numbered Recommendations · Full Reasoning block
+- Each node receives the other nodes' positions and key findings
+- Each node responds: `maintains_position` (bool), `revision` (str|null), `points_of_agreement`, `points_of_disagreement`
+- Validated with `CrossExamineOutput` Pydantic model
+- "Position maintained" / "Position revised" badges shown per node
+- Canvas edge colors: green = agreement · red = disagreement · yellow = partial
 
-**Node Outputs tab:** One card per node with colored left border · Position · Key Findings · Concerns · Reasoning (collapsible) · Cross-Check card at bottom
+### Result Caching
 
-## Standard Mode — Case Decomposition + Expert Analysis
+Before each LLM call, a SHA256 key is computed from `(file_contents, node_behavior, question)`. On a cache hit, the stored result is deserialised and a `node_cached` WebSocket event is sent — no LLM call made. Cache TTL: 3600s (Redis).
 
-In Standard mode, the **Distributor** (case decomposer) breaks the situation into 3–5 specific analytical sub-questions, each assigned to a domain. Then the **Node Selector** (running `meta-llama/Llama-3.2-1B-Instruct`) evaluates the situation and selects 3–5 relevant expert roles on the fly. Each expert receives their *specific sub-question* plus the full situation as context.
+- "⚡ Cached" badge shown on cached node cards
+- Settings panel: "Clear cache" button → `DELETE /api/cache/{session_id}`
 
-Responses are parsed as **structured JSON** (Pydantic `NodeOutput` schema). On parse failure, falls back to 3 generic nodes (Analyst, Critic, Synthesist).
+### Data Enrichment
 
-Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
+When `ENRICHMENT_ENABLED=true`, the pipeline runs before node execution:
 
-## WebSocket Resilience
+1. Entity extraction — LLM extracts `{ people, organizations, drugs, locations, dates, legal_refs }`
+2. Web enrichment — Tavily search on top entities (requires `TAVILY_API_KEY`)
+3. Domain API enrichment:
+   - `medical` → PubMed E-utilities
+   - `legal` → CourtListener
+   - `startup` → SEC EDGAR
+   - `engineering` → NVD CVE API
+4. Enriched context (raw + web_data + domain_data) injected into all nodes
 
-The frontend includes automatic reconnection with exponential backoff (1s, 2s, 4s, 8s, 16s, max 5 attempts). If the WebSocket disconnects mid-analysis:
+UI shows enrichment status steps: "Extracting entities… Fetching web context… Querying domain sources…"
 
-1. The frontend tracks the last received event ID
-2. On reconnect, it sends a `resume` message with the session ID and last event ID
-3. The backend replays missed events from Redis (last 100 events, 10min TTL)
-4. Partial node results are recovered for nodes that hadn't completed yet
-5. After 5 failed attempts, the UI shows "Connection lost — Click Retry"
+### Interactive Canvas
 
-## API Endpoints
+- **Node click** — hit-test by distance, scrolls to the matching node card in the Outputs tab with a ring animation
+- **Confidence arc** — thin arc around each node circle, fill % = confidence score, gradient red → yellow → green
+- **Bezier edges** — colored by agreement (green/red/yellow), thickness proportional to confidence delta; hover tooltip shows `"NodeA ↔ NodeB: {agreement_summary}"`
+- **Zoom & pan** — mouse wheel zoom (0.5×–3×), click-drag on empty space to pan, double-click to reset fit
+- **Minimap** — bottom-right corner (100×75px), full graph at reduced scale with viewport rectangle overlay
+
+### Follow-Up Conversation
+
+After analysis completes, a chat input appears below the verdict panel. Each follow-up message is sent to `POST /api/analyze/followup` with the full conversation history and prior analysis as context. Responses stream via SSE. Cited nodes are shown as highlighted chips.
+
+### Export
+
+Export button in the verdict panel header opens a dropdown:
+
+| Option | Endpoint | Output |
+|---|---|---|
+| Export as PDF | `POST /api/export/pdf` | Multi-page PDF (verdict, per-node sections, synthesis) |
+| Export as JSON | `GET /api/export/json/{session_id}` | Full analysis state |
+| Copy link | signed JWT | Read-only `/view/{session_id}?token=...` |
+
+### WebSocket Resilience
+
+Auto-reconnect with exponential backoff: 1s → 2s → 4s → 8s → 16s (max 5 attempts).
+
+On reconnect, the frontend sends `{ type: 'resume', session_id, last_event_id }`. The backend replays missed events from Redis (last 100 events per session, 10-min TTL) and recovers partial node results. After 5 failures: "Connection lost — Click Retry."
+
+---
+
+## Output
+
+**Verdict tab:** Verdict card · confidence pill · consensus meter (0–100% gradient) · critical findings · unresolved disagreements · numbered recommendations · full reasoning block
+
+**Node Outputs tab:** One card per node with colored left border · position · key findings · concerns · reasoning (collapsible) · cross-examination section · cross-check card at bottom
+
+---
+
+## API Reference
 
 | Method | Path | Description |
-|--------|------|-------------|
+|---|---|---|
 | POST | `/api/auth/register` | Register new user |
 | POST | `/api/auth/login` | Login, get JWT |
 | GET | `/api/sessions` | List user sessions |
@@ -196,10 +271,48 @@ The frontend includes automatic reconnection with exponential backoff (1s, 2s, 4
 | DELETE | `/api/sessions/{id}` | Delete session |
 | POST | `/api/analyze` | Run council analysis |
 | GET | `/api/analyze/{id}` | Get completed analysis |
+| POST | `/api/analyze/followup` | Follow-up conversation turn |
 | WS | `/ws/{session_id}` | Real-time streaming graph events |
-| POST | `/api/case-study/upload` | Upload file for case study extraction |
+| POST | `/api/case-study/upload` | Upload file for case study |
+| DELETE | `/api/cache/{session_id}` | Clear result cache for session |
+| POST | `/api/export/pdf` | Export analysis as PDF |
+| GET | `/api/export/json/{session_id}` | Export analysis as JSON |
+| GET | `/view/{session_id}` | Read-only shared viewer |
+| POST | `/api/evals/run` | Run eval suite (admin only) |
 | GET | `/api/nodes` | List available expert domains |
 | GET | `/health` | Health check |
+
+---
+
+## Eval Harness
+
+```bash
+# Run all fixtures
+python -m backend.evals.runner --all
+
+# Run single fixture
+python -m backend.evals.runner --fixture medical
+```
+
+5 fixtures (medical, detective, startup, legal, engineering). Each fixture defines `min_consensus`, `required_findings`, `forbidden_content`, `min_node_confidence`, `synthesis_must_contain`. The runner scores each check and prints a formatted pass/fail table.
+
+Admin API: `POST /api/evals/run` — requires `ADMIN_SECRET` env var.
+
+---
+
+## Rate Limits (HuggingFace free tier)
+
+| Limit | Value |
+|---|---|
+| Global | 800 requests/day |
+| Per user | 50 requests/hour |
+| Burst | 1 request/2 seconds |
+| Retry | tenacity exponential backoff: 2s → 4s → 8s |
+| Cache TTL | 24h (SHA256 key, Redis) |
+
+HF calls per analysis: 6–8 (1 distributor + 3–5 experts + 1 cross-examine + 1 synthesiser)
+
+---
 
 ## Project Structure
 
@@ -207,75 +320,99 @@ The frontend includes automatic reconnection with exponential backoff (1s, 2s, 4
 cognitus/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/              # LLM-powered agent nodes
+│   │   ├── agents/
 │   │   │   ├── distributor.py
-│   │   │   ├── expert_node.py
+│   │   │   ├── expert_node.py       # JSON parsing, hallucination check, streaming, caching, RAG
 │   │   │   ├── cross_check.py
 │   │   │   └── synthesizer.py
-│   │   ├── graph/               # LangGraph state machine
+│   │   ├── graph/
 │   │   │   ├── state.py
-│   │   │   └── council_graph.py
-│   │   ├── api/                 # FastAPI routes + WebSocket
+│   │   │   └── council_graph.py     # cross_examine node wired in
+│   │   ├── api/
 │   │   │   ├── routes/
 │   │   │   │   ├── auth.py
 │   │   │   │   ├── sessions.py
-│   │   │   │   └── analyze.py
-│   │   │   ├── upload.py        # Case study file upload
-│   │   │   └── websocket.py     # Standard + case study WS handlers
-│   │   ├── core/                # Config, DB, security
+│   │   │   │   ├── analyze.py       # followup + evals/run endpoints
+│   │   │   │   ├── cache.py         # DELETE /api/cache/{session_id}
+│   │   │   │   ├── config_route.py  # PATCH /api/config
+│   │   │   │   ├── eval.py
+│   │   │   │   └── export.py        # PDF + JSON + share link
+│   │   │   ├── upload.py
+│   │   │   └── websocket.py         # event_id, Redis history, resume, node_token events
+│   │   ├── core/
 │   │   │   ├── config.py
-│   │   │   ├── database.py
+│   │   │   ├── database.py          # pgvector extension enabled
 │   │   │   └── security.py
-│   │   ├── services/            # HF API, node selector, etc.
+│   │   ├── services/
+│   │   │   ├── llm_provider.py      # LLMProvider ABC + 5 implementations
 │   │   │   ├── hf_service.py
 │   │   │   ├── node_selector.py
 │   │   │   ├── rate_limiter.py
 │   │   │   ├── cache.py
+│   │   │   ├── cache_key.py         # SHA256 key generation
+│   │   │   ├── embedder.py          # sentence-transformers + pgvector
+│   │   │   ├── enrichment.py        # entity extraction + Tavily + domain APIs
 │   │   │   └── queue_worker.py
-│   │   ├── models/              # SQLAlchemy ORM models (7 tables)
-│   │   └── schemas/             # Pydantic request/response schemas (NodeOutput, etc.)
-│   │   └── node_output.py
-│   └── __init__.py
+│   │   ├── models/
+│   │   │   ├── chunks.py            # DocumentChunk ORM (Vector(384))
+│   │   │   └── ...                  # 7 tables total
+│   │   └── schemas/
+│   │       └── node_output.py       # NodeOutput + CrossExamineOutput Pydantic models
+│   ├── evals/
+│   │   ├── __init__.py
+│   │   ├── fixtures.json            # 5 case study fixtures
+│   │   └── runner.py                # EvalResult, CLI, scoring
 │   ├── main.py
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── app.js               # Main application logic
-│   │   ├── store.js             # Reactive state store
-│   │   ├── canvas.js            # Canvas graph rendering
-│   │   ├── api.js               # WebSocket + HTTP client
-│   │   ├── utils.js             # Helpers, colors, markdown, presets
-│   │   ├── main.js              # Entry point
-│   │   └── styles.css           # All styles (no CSS framework)
+│   │   ├── app.js                   # follow-up chat, export dropdown, node click handler
+│   │   ├── store.js                 # followup_history, cross-examination events
+│   │   ├── canvas.js                # confidence arcs, bezier edges, zoom/pan, minimap
+│   │   ├── api.js                   # CognitusSocket class, exponential backoff, resume
+│   │   ├── groq.js                  # Groq SSE streaming client
+│   │   ├── utils.js
+│   │   ├── main.js
+│   │   └── styles.css
 │   ├── index.html
 │   ├── package.json
 │   └── vite.config.ts
-├── architecture.svg
-├── pipeline.svg
+├── postgres/
+│   └── init.sql                     # includes document_chunks + pgvector extension
 ├── docker-compose.yml
 └── .env.example
 ```
 
 ---
 
-## Dynamic Node Selection
+## Environment Variables
 
-Instead of a static panel of experts, Cognitus uses a **Node Selector** call before analysis:
+```env
+# LLM
+LLM_PROVIDER=groq                    # huggingface | groq | anthropic | openrouter | ollama
+HF_API_TOKEN=
+GROQ_API_KEY=
+ANTHROPIC_API_KEY=
+OPENROUTER_API_KEY=
+OLLAMA_BASE_URL=http://localhost:11434
 
-1. The question is sent to `meta-llama/Llama-3.2-1B-Instruct` with a prompt asking for 3–5 domain-specific expert roles
-2. Response is parsed as structured JSON
-3. Each selected node gets an auto-generated role description and behavior prompt
-4. Nodes appear in the left panel with a staggered fade-in animation
-5. On parse failure, falls back to 3 generic nodes: Analyst, Critic, Synthesist
+# App
+SECRET_KEY=your-secret-key-here
 
-Model fallback chain: `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
-## Rate Limits
+# Infrastructure
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/cognitus
+REDIS_URL=redis://redis:6379
 
-HuggingFace free tier limits enforced by the platform:
-- 800 requests/day global
-- 50 requests/hour per user
-- 1 request per 2 seconds burst
+# Features
+ENRICHMENT_ENABLED=false
+TAVILY_API_KEY=
+
+# Admin
+ADMIN_SECRET=
+```
+
+---
 
 ## License
 
