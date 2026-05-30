@@ -1,128 +1,92 @@
-<svg viewBox="0 0 860 540" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', system-ui, sans-serif">
+<svg width="100%" viewBox="0 0 680 660" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>Cognitus pipeline</title>
+  <desc>Analysis pipeline from input through Distributor, parallel Expert Nodes, Cross-Examine, Synthesizer to Output</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0d1117"/>
-      <stop offset="100%" stop-color="#161b22"/>
-    </linearGradient>
-    <linearGradient id="distGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#818cf8"/>
-    </linearGradient>
-    <linearGradient id="crossGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f59e0b"/>
-      <stop offset="100%" stop-color="#fbbf24"/>
-    </linearGradient>
-    <linearGradient id="synthGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#22c55e"/>
-      <stop offset="100%" stop-color="#4ade80"/>
-    </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="4" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="softglow">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <marker id="arrowGray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#4b5563"/>
-    </marker>
-    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#38bdf8"/>
-    </marker>
-    <marker id="arrowAmber" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#fbbf24"/>
-    </marker>
-    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="860" height="540" rx="14" fill="url(#bg)"/>
-  <rect width="860" height="540" rx="14" fill="none" stroke="#21262d" stroke-width="1.5"/>
-
-  <!-- Title -->
-  <text x="430" y="38" text-anchor="middle" fill="#8b949e" font-size="11" font-weight="500" letter-spacing="3">COGNITUS · AGENT PIPELINE</text>
-
   <!-- INPUT -->
-  <rect x="295" y="58" width="270" height="50" rx="8" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>
-  <text x="430" y="78" text-anchor="middle" fill="#6e7681" font-size="10" letter-spacing="1">INPUT</text>
-  <text x="430" y="97" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Situation / Case Files</text>
+  <rect x="264" y="20" width="152" height="44" rx="22" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text x="340" y="47" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Input / question</text>
 
   <!-- Arrow: Input → Distributor -->
-  <line x1="430" y1="108" x2="430" y2="138" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+  <line x1="340" y1="64" x2="340" y2="88" stroke="#5F5E5A" stroke-width="1" marker-end="url(#arrow)"/>
 
   <!-- DISTRIBUTOR -->
-  <rect x="285" y="140" width="290" height="70" rx="10" fill="#13103a" stroke="url(#distGrad)" stroke-width="2" filter="url(#glow)"/>
-  <text x="430" y="164" text-anchor="middle" fill="#a5b4fc" font-size="10" letter-spacing="2">DISTRIBUTOR</text>
-  <text x="430" y="182" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Case Decomposer</text>
-  <text x="430" y="199" text-anchor="middle" fill="#6366f1" font-size="10">Breaks situation into 3–5 focused sub-questions</text>
+  <rect x="220" y="88" width="240" height="56" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text x="340" y="112" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#3C3489">Distributor</text>
+  <text x="340" y="132" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#534AB7">Decomposes into 3–5 sub-questions</text>
 
-  <!-- Parallel label -->
-  <text x="430" y="232" text-anchor="middle" fill="#374151" font-size="9" letter-spacing="2">▸ ALL EXPERT NODES RUN IN PARALLEL ◂</text>
+  <!-- Fan out lines to 3 expert nodes -->
+  <!-- Centre vertical drop then fan -->
+  <line x1="340" y1="144" x2="340" y2="168" stroke="#534AB7" stroke-width="1"/>
+  <line x1="148" y1="168" x2="532" y2="168" stroke="#534AB7" stroke-width="1"/>
+  <line x1="148" y1="168" x2="148" y2="192" stroke="#534AB7" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="340" y1="168" x2="340" y2="192" stroke="#534AB7" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="532" y1="168" x2="532" y2="192" stroke="#534AB7" stroke-width="1" marker-end="url(#arrow)"/>
 
-  <!-- Fan lines from Distributor to 5 experts -->
-  <path d="M355,210 Q200,230 107,268" stroke="#38bdf8" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
-  <path d="M385,210 Q295,235 242,268" stroke="#38bdf8" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
-  <line x1="430" y1="210" x2="430" y2="268" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
-  <path d="M475,210 Q565,235 618,268" stroke="#38bdf8" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
-  <path d="M505,210 Q660,230 753,268" stroke="#38bdf8" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowBlue)"/>
+  <!-- EXPERT NODE A -->
+  <rect x="60" y="192" width="176" height="64" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+  <text x="148" y="216" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Expert node A</text>
+  <text x="148" y="236" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#993C1D">Sub-question + case context</text>
+  <text x="148" y="248" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#D85A30">NodeOutput JSON · RAG chunks</text>
 
-  <!-- EXPERT NODES -->
-  <!-- E1: Finance -->
-  <rect x="48" y="270" width="118" height="76" rx="8" fill="#0a1929" stroke="#0ea5e9" stroke-width="1.4" filter="url(#softglow)"/>
-  <text x="107" y="291" text-anchor="middle" fill="#38bdf8" font-size="9" letter-spacing="1.5">EXPERT</text>
-  <text x="107" y="308" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Finance</text>
-  <text x="107" y="323" text-anchor="middle" fill="#374151" font-size="9">position · findings</text>
-  <text x="107" y="337" text-anchor="middle" fill="#374151" font-size="9">concerns · confidence</text>
+  <!-- EXPERT NODE B -->
+  <rect x="252" y="192" width="176" height="64" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+  <text x="340" y="216" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Expert node B</text>
+  <text x="340" y="236" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#993C1D">Sub-question + case context</text>
+  <text x="340" y="248" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#D85A30">NodeOutput JSON · RAG chunks</text>
 
-  <!-- E2: Legal -->
-  <rect x="183" y="270" width="118" height="76" rx="8" fill="#0a1929" stroke="#0ea5e9" stroke-width="1.4" filter="url(#softglow)"/>
-  <text x="242" y="291" text-anchor="middle" fill="#38bdf8" font-size="9" letter-spacing="1.5">EXPERT</text>
-  <text x="242" y="308" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Legal</text>
-  <text x="242" y="323" text-anchor="middle" fill="#374151" font-size="9">position · findings</text>
-  <text x="242" y="337" text-anchor="middle" fill="#374151" font-size="9">concerns · confidence</text>
+  <!-- EXPERT NODE C -->
+  <rect x="444" y="192" width="176" height="64" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+  <text x="532" y="216" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Expert node C</text>
+  <text x="532" y="236" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#993C1D">Sub-question + case context</text>
+  <text x="532" y="248" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#D85A30">NodeOutput JSON · RAG chunks</text>
 
-  <!-- E3: Ethics -->
-  <rect x="371" y="270" width="118" height="76" rx="8" fill="#0a1929" stroke="#0ea5e9" stroke-width="1.4" filter="url(#softglow)"/>
-  <text x="430" y="291" text-anchor="middle" fill="#38bdf8" font-size="9" letter-spacing="1.5">EXPERT</text>
-  <text x="430" y="308" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Ethics</text>
-  <text x="430" y="323" text-anchor="middle" fill="#374151" font-size="9">position · findings</text>
-  <text x="430" y="337" text-anchor="middle" fill="#374151" font-size="9">concerns · confidence</text>
+  <!-- Parallel badge -->
+  <rect x="296" y="278" width="88" height="22" rx="11" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text x="340" y="293" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#2C2C2A">runs in parallel</text>
 
-  <!-- E4: Technology -->
-  <rect x="559" y="270" width="118" height="76" rx="8" fill="#0a1929" stroke="#0ea5e9" stroke-width="1.4" filter="url(#softglow)"/>
-  <text x="618" y="291" text-anchor="middle" fill="#38bdf8" font-size="9" letter-spacing="1.5">EXPERT</text>
-  <text x="618" y="308" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Technology</text>
-  <text x="618" y="323" text-anchor="middle" fill="#374151" font-size="9">position · findings</text>
-  <text x="618" y="337" text-anchor="middle" fill="#374151" font-size="9">concerns · confidence</text>
+  <!-- Fan-in lines from expert nodes -->
+  <line x1="148" y1="256" x2="148" y2="310" stroke="#993C1D" stroke-width="1"/>
+  <line x1="340" y1="256" x2="340" y2="310" stroke="#993C1D" stroke-width="1"/>
+  <line x1="532" y1="256" x2="532" y2="310" stroke="#993C1D" stroke-width="1"/>
+  <line x1="148" y1="310" x2="532" y2="310" stroke="#993C1D" stroke-width="1"/>
+  <line x1="340" y1="310" x2="340" y2="328" stroke="#993C1D" stroke-width="1" marker-end="url(#arrow)"/>
 
-  <!-- E5: Psychology -->
-  <rect x="694" y="270" width="118" height="76" rx="8" fill="#0a1929" stroke="#0ea5e9" stroke-width="1.4" filter="url(#softglow)"/>
-  <text x="753" y="291" text-anchor="middle" fill="#38bdf8" font-size="9" letter-spacing="1.5">EXPERT</text>
-  <text x="753" y="308" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600">Psychology</text>
-  <text x="753" y="323" text-anchor="middle" fill="#374151" font-size="9">position · findings</text>
-  <text x="753" y="337" text-anchor="middle" fill="#374151" font-size="9">concerns · confidence</text>
+  <!-- CROSS-EXAMINE -->
+  <rect x="200" y="328" width="280" height="68" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text x="340" y="352" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#085041">Cross-examine</text>
+  <text x="340" y="370" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#0F6E56">Each node: maintain or revise position</text>
+  <text x="340" y="386" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#0F6E56">Agreement / disagreement scored</text>
 
-  <!-- Fan lines: experts → Cross-Check -->
-  <path d="M107,346 Q107,390 380,406" stroke="#fbbf24" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
-  <path d="M242,346 Q242,385 380,406" stroke="#fbbf24" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
-  <line x1="430" y1="346" x2="430" y2="404" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
-  <path d="M618,346 Q618,385 480,406" stroke="#fbbf24" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
-  <path d="M753,346 Q753,390 480,406" stroke="#fbbf24" stroke-width="1.2" fill="none" stroke-dasharray="5,3" marker-end="url(#arrowAmber)"/>
-
-  <!-- CROSS-CHECK -->
-  <rect x="285" y="408" width="290" height="64" rx="10" fill="#1a1200" stroke="url(#crossGrad)" stroke-width="2" filter="url(#glow)"/>
-  <text x="430" y="430" text-anchor="middle" fill="#fbbf24" font-size="10" letter-spacing="2">CROSS-CHECK</text>
-  <text x="430" y="449" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Contradiction Analyst</text>
-  <text x="430" y="463" text-anchor="middle" fill="#78350f" font-size="10">Pairwise comparison · consensus score 0.0–1.0</text>
-
-  <!-- Arrow: Cross-Check → Synthesizer -->
-  <line x1="430" y1="472" x2="430" y2="494" stroke="#4ade80" stroke-width="1.8" marker-end="url(#arrowGreen)"/>
+  <!-- Arrow Cross-examine → Synthesizer -->
+  <line x1="340" y1="396" x2="340" y2="424" stroke="#0F6E56" stroke-width="1" marker-end="url(#arrow)"/>
 
   <!-- SYNTHESIZER -->
-  <rect x="285" y="496" width="290" height="32" rx="10" fill="#051a0e" stroke="url(#synthGrad)" stroke-width="2" filter="url(#glow)"/>
-  <text x="370" y="517" text-anchor="middle" fill="#4ade80" font-size="10" letter-spacing="2">SYNTHESIZER</text>
-  <text x="540" y="517" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="500">→  Single committed verdict</text>
+  <rect x="200" y="424" width="280" height="68" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text x="340" y="448" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#3C3489">Synthesizer</text>
+  <text x="340" y="466" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#534AB7">Forced commitment — one primary verdict</text>
+  <text x="340" y="482" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#534AB7">No hedging · consensus meter</text>
+
+  <!-- Arrow Synthesizer → Output -->
+  <line x1="340" y1="492" x2="340" y2="520" stroke="#534AB7" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- OUTPUT -->
+  <rect x="160" y="520" width="360" height="104" rx="10" fill="#D3D1C7" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text x="340" y="546" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Output</text>
+  <line x1="180" y1="554" x2="500" y2="554" stroke="#5F5E5A" stroke-width="0.5" opacity="0.5"/>
+  <text x="340" y="572" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#444441">Verdict card · confidence pill · consensus meter</text>
+  <text x="340" y="590" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#444441">Per-node output cards · cross-examine results</text>
+  <text x="340" y="608" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#444441">Export (PDF / JSON / share link) · follow-up chat</text>
+
+  <!-- Side labels -->
+  <text x="32" y="200" font-family="sans-serif" font-size="10" fill="#993C1D" text-anchor="middle">‖ parallel</text>
+
+  <!-- Cache hit bypass (dashed, right side) -->
+  <path d="M620 240 Q650 240 650 340 Q650 432 550 440" fill="none" stroke="#BA7517" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <text x="656" y="236" font-family="sans-serif" font-size="10" fill="#854F0B" text-anchor="start">cache</text>
+  <text x="656" y="248" font-family="sans-serif" font-size="10" fill="#854F0B" text-anchor="start">hit ⚡</text>
 </svg>
