@@ -258,11 +258,13 @@ export function sendStressTest(situation, verdict, reasoning) {
  */
 export function connectWithOptions(situation, sessionId, userId, options = {}) {
   isIntentionalClose = false;
+  const groqKey = options.groqApiKey || localStorage.getItem('cognitus_groq_key') || '';
   pendingRequest = {
     situation,
     user_id: userId,
     analysis_mode: options.analysisMode || 'standard',
     ghost_level: options.ghostLevel || 'off',
+    ...(groqKey ? { groq_api_key: groqKey } : {}),
   };
   currentSessionId = sessionId;
   lastEventId = 0;

@@ -222,22 +222,27 @@ class GroqProvider(LLMProvider):
 
     Primary:  llama-3.3-70b-versatile
     Fallback: gemini-flash-1.5 via Google AI Studio (if configured)
+
+    Accepts an optional api_key to override env/settings-based key.
     """
 
     PRIMARY_MODEL = "llama-3.3-70b-versatile"
     FALLBACK_MODEL = "gemini-flash-1.5"
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self._client: Any = None
         self._fallback_client: Any = None
+        self._override_api_key = api_key
         self._init_clients()
 
     def _init_clients(self) -> None:
         try:
             from langchain_groq import ChatGroq
-            api_key = settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
+            # Use override key first, then settings, then env var
+            api_key = self._override_api_key or settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY")
             if not api_key:
                 raise ValueError("GROQ_API_KEY not configured")
+            logger.info("Initializing Groq client with key length: %d", len(api_key))
             self._client = ChatGroq(
                 model=self.PRIMARY_MODEL,
                 api_key=api_key,
@@ -473,17 +478,21 @@ class LLMRouter:
         text, model = await router.generate("system", "user")
         text = await router.generate_with_image("system", "user", image_uri)
         text = await router.summarize_text(long_text)
+
+    Accepts an optional api_key to override env/settings-based key
+    (used when frontend passes Groq key via WebSocket).
     """
 
-    def __init__(self, mode: str | None = None) -> None:
+    def __init__(self, mode: str | None = None, api_key: str | None = None) -> None:
         self.mode = LLMMode(mode or settings.LLM_MODE or LLMMode.FREE.value)
         self._provider: LLMProvider | None = None
         self._hardware: HardwareInfo | None = None
+        self._api_key = api_key
         self._init_provider()
 
     def _init_provider(self) -> None:
         if self.mode == LLMMode.FREE:
-            self._provider = GroqProvider()
+            self._provider = GroqProvider(api_key=self._api_key)
         elif self.mode == LLMMode.LOCAL:
             hw = self._detect_hardware()
             self._provider = OllamaProvider(model=hw.recommended_model)
@@ -679,8 +688,17 @@ def get_llm_router() -> LLMRouter:
     return _router_instance
 
 
-def reset_llm_router(mode: str | None = None) -> LLMRouter:
-    """Reset the router (e.g. when Ghost Mode overrides LLM mode)."""
+def reset_llm_router(mode: str | None = None, api_key: str | None = None) -> LLMRouter:
+    """Reset the router (e.g. when Ghost Mode overrides LLM mode).
+
+    Args:
+        mode: Optional LLM mode override.
+        api_key: Optional API key override (used for Groq when key
+                 comes from frontend via WebSocket).
+    """
     global _router_instance
-    _router_instance = LLMRouter(mode=mode or settings.LLM_MODE)
+    _router_instance = LLMRouter(
+        mode=mode or settings.LLM_MODE,
+        api_key=api_key,
+    )
     return _router_instance

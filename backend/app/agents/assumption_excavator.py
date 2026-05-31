@@ -20,6 +20,8 @@ from app.schemas.node_output import clean_json_response
 # Assumption from app.graph.state is imported lazily (it's a TypedDict, used only for type hints)
 # get_llm_router from app.services.llm_router is imported lazily
 
+logger = logging.getLogger(__name__)
+
 _Assumption = None
 def _get_assumption():
     global _Assumption
@@ -28,15 +30,15 @@ def _get_assumption():
         _Assumption = Assumption
     return _Assumption
 
-_router = None
-def _get_router():
-    global _router
-    if _router is None:
-        from app.services.llm_router import get_llm_router
-        _router = get_llm_router()
-    return _router
 
-logger = logging.getLogger(__name__)
+def _get_router():
+    """Get the current LLM router.
+
+    Unlike the old approach, this does NOT cache at module level,
+    so reset_llm_router() updates are picked up immediately.
+    """
+    from app.services.llm_router import get_llm_router
+    return get_llm_router()
 
 EXCAVATOR_SYSTEM_PROMPT = """\
 You are an assumption excavator. Given a situation, identify every hidden assumption,
