@@ -1,4 +1,4 @@
-import { getState, subscribe } from './store.js';
+import { getState, subscribe, setState } from './store.js';
 import { resolveColor, getNodeColor, getDynamicNodeColor } from './utils.js';
 
 let scale = 1;
@@ -9,11 +9,31 @@ let nodes = [];
 let hoveredNode = null;
 let selectedNodeId = null;
 
-const NODE_W = 160;
+const NODE_W = 180;
 const NODE_H = 48;
-const NODE_R = 12;
+const NODE_R = 0;
 const LEVEL_GAP = 110;
 const EXPERT_GAP = 200;
+
+// Badge colors (the ONLY colored elements)
+const BADGE_COLORS = {
+  distributor: '#2563eb',
+  crosscheck: '#7c3aed',
+  synthesizer: '#0d9488',
+  verdict: '#d97706',
+  report: '#2563eb',
+  reanalyze: '#0d9488',
+  default: '#2563eb',
+};
+
+const BADGE_ICONS = {
+  distributor: 'D',
+  crosscheck: 'C',
+  synthesizer: 'S',
+  verdict: 'V',
+  report: 'R',
+  reanalyze: 'R',
+};
 
 // Canvas state for interaction
 let canvasEl = null;
@@ -80,7 +100,7 @@ export function buildGraphLayout(state) {
 
   // Add thinking steps as floating nodes
   if (state.thinkingSteps && state.thinkingSteps.length > 0) {
-    const steps = state.thinkingSteps.slice(-3); // Show last 3
+    const steps = state.thinkingSteps.slice(-3);
     steps.forEach((step, i) => {
       const nodeRef = list.find(n => n.type === step.node || n.shortLabel === step.node);
       if (nodeRef) {
@@ -118,6 +138,18 @@ function getCompleteStatus(state) {
   return { completed, expertComplete };
 }
 
+function getNodeColors() {
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return {
+    bg: isDark ? '#1a1a1a' : '#ffffff',
+    border: isDark ? '#ffffff' : '#000000',
+    dimBorder: isDark ? '#888888' : '#6b6b6b',
+    text: isDark ? '#ffffff' : '#000000',
+    dimText: isDark ? '#888888' : '#6b6b6b',
+    connectionLine: isDark ? '#888888' : '#6b6b6b',
+  };
+}
+
 export function renderCanvas(state) {
   const canvas = document.getElementById('main-canvas');
   if (!canvas) return;
@@ -133,27 +165,8 @@ export function renderCanvas(state) {
   canvasW = rect.width;
   canvasH = rect.height;
 
-  // Background — transparent (glass via CSS), with subtle grid overlay
+  // Clear canvas
   ctx.clearRect(0, 0, canvasW, canvasH);
-
-  // Subtle grid
-  ctx.save();
-  ctx.strokeStyle = 'rgba(200, 149, 106, 0.04)';
-  ctx.lineWidth = 0.5;
-  const gridSize = 40;
-  for (let x = 0; x < canvasW; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvasH);
-    ctx.stroke();
-  }
-  for (let y = 0; y < canvasH; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvasW, y);
-    ctx.stroke();
-  }
-  ctx.restore();
 
   ctx.save();
   ctx.translate(offsetX, offsetY);
@@ -191,108 +204,89 @@ export function renderCanvas(state) {
 }
 
 function drawNode(ctx, node, isActive, isComplete, isSelected) {
-  const nodeColor = node.color || resolveColor(getNodeColor(node.type));
+  const colors = getNodeColors();
+  const badgeColor = BADGE_COLORS[node.type] || BADGE_COLORS.default;
+  const badgeIcon = BADGE_ICONS[node.type] || node.type.charAt(0).toUpperCase();
+
   ctx.save();
 
-  // Streaming glow — warm peach
-  if (node.streaming) {
-    ctx.shadowColor = '#C8956A';
-    ctx.shadowBlur = 24;
+  // Dim inactive nodes
+  if (!isActive && !isComplete && !isSelected) {
+    ctx.globalAlpha = 0.5;
   }
 
-  // Background
-  ctx.fillStyle = '#261C14';
-  roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
+  // Card background
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(node.x, node.y, NODE_W, NODE_H);
+
+  // Left border accent for active/selected
+  if (isActive || isSelected) {
+    ctx.fillStyle = badgeColor;
+    ctx.fillRect(node.x, node.y, 3, NODE_H);
+  }
+
+  // Border
+  ctx.strokeStyle = isActive || isSelected ? colors.border : colors.dimBorder;
+  ctx.lineWidth = isActive || isSelected ? 1.5 : 1;
+  ctx.strokeRect(node.x, node.y, NODE_W, NODE_H);
+
+  // Draw colored badge (24x24 rounded square with icon)
+  const badgeX = node.x + 10;
+  const badgeY = node.y + (NODE_H - 24) / 2;
+  ctx.fillStyle = badgeColor;
+  roundRect(ctx, badgeX, badgeY, 24, 24, 4);
   ctx.fill();
 
-  // Reset shadow for stroke
-  ctx.shadowBlur = 0;
-
-  // Border styling — warm tones
-  if (isActive) {
-    ctx.strokeStyle = '#C8956A';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#C8956A';
-    ctx.shadowBlur = 16;
-  } else if (isSelected) {
-    ctx.strokeStyle = '#E8B89A';
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#E8B89A';
-    ctx.shadowBlur = 12;
-  } else {
-    ctx.strokeStyle = 'rgba(74, 48, 32, 0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 0;
-  }
-  ctx.globalAlpha = isComplete || isActive || isSelected ? 1 : 0.6;
-  roundRect(ctx, node.x, node.y, NODE_W, NODE_H, NODE_R);
-  ctx.stroke();
-
-  ctx.shadowBlur = 0;
-  ctx.globalAlpha = 1;
-
-  // Cached badge
-  if (node.cached) {
-    ctx.fillStyle = '#7DB88A';
-    ctx.font = '400 10px "JetBrains Mono", monospace';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText('⚡ cached', node.x + NODE_W - 8, node.y + 4);
-  }
+  // Icon letter inside badge
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badgeIcon, badgeX + 12, badgeY + 12);
 
   // Label
-  ctx.fillStyle = '#F5EDE6';
-  ctx.font = '600 12px "JetBrains Mono", monospace';
+  const labelX = badgeX + 24 + 10;
+  const displayLabel = node.isExpert ? node.shortLabel || node.label : node.label;
+  ctx.fillStyle = colors.text;
+  ctx.font = '400 13px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const labelX = node.x + 14;
-  const labelY = node.y + NODE_H / 2;
+  ctx.fillText(displayLabel, labelX, node.y + NODE_H / 2);
+  ctx.font = '600 13px -apple-system, BlinkMacSystemFont, sans-serif';
 
-  const displayLabel = node.isExpert ? node.shortLabel || node.label : node.label;
-
-  if (node.isExpert) {
-    const dotR = 4;
-    ctx.beginPath();
-    ctx.arc(labelX, labelY, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = nodeColor;
-    ctx.fill();
-    ctx.font = '600 12px "DM Sans", sans-serif';
-    ctx.fillStyle = '#F5EDE6';
-    ctx.textAlign = 'left';
-    ctx.fillText(displayLabel, labelX + 12, labelY);
-  } else {
-    ctx.fillText(displayLabel, labelX, labelY);
-  }
-
-  // Confidence indicator dot (bottom of node)
+  // Confidence indicator (small dot for experts)
   if (node.isExpert && node.complete && node.confidence) {
-    const confColor = node.confidence === 'high' ? resolveColor('--success') :
-      node.confidence === 'low' ? resolveColor('--danger') : resolveColor('--warning');
+    const confColor = node.confidence === 'high' ? '#0d9488' :
+      node.confidence === 'low' ? '#2563eb' : '#d97706';
     ctx.beginPath();
-    ctx.arc(labelX + 8, labelY + 14, 3, 0, Math.PI * 2);
+    ctx.arc(node.x + NODE_W - 14, node.y + NODE_H / 2, 3, 0, Math.PI * 2);
     ctx.fillStyle = confColor;
     ctx.fill();
   }
 
-  // Streaming indicator (pulsing dot) — warm peach
+  // Cached badge
+  if (node.cached) {
+    ctx.fillStyle = colors.dimText;
+    ctx.font = '400 9px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('cached', node.x + NODE_W - 8, node.y + NODE_H - 4);
+  }
+
+  // Streaming indicator (pulsing dot)
   if (node.streaming) {
     const pulse = Math.sin(Date.now() / 300) * 0.5 + 0.5;
     ctx.beginPath();
-    ctx.arc(node.x + NODE_W - 12, node.y + NODE_H / 2, 4, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(200, 149, 106, ${pulse * 0.6 + 0.4})`;
+    ctx.arc(node.x + NODE_W - 12, node.y + NODE_H / 2, 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(0,0,0,${pulse * 0.6 + 0.4})`;
     ctx.fill();
-    // Outer pulse ring
-    ctx.beginPath();
-    ctx.arc(node.x + NODE_W - 12, node.y + NODE_H / 2, 8, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(200, 149, 106, ${pulse * 0.3})`;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
   }
 
   ctx.restore();
 }
 
 function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
+  const colors = getNodeColors();
   const findNode = (id) => nodes.find(n => n.id === id || n.type === id);
   const dist = findNode('distributor');
   if (!dist) return;
@@ -304,7 +298,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
 
   const edges = [];
 
-  // Distributor -> Experts (bezier curves)
+  // Distributor -> Experts (dashed lines)
   domains.forEach((d, i) => {
     const ex = cx + (i - (expertCount - 1) / 2) * EXPERT_GAP;
     const srcX = dist.x + NODE_W / 2;
@@ -314,14 +308,13 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
 
     const isActiveLine = active === 'experts' || active === 'distributor';
     const isDone = expertComplete[d];
-    const isCached = state.cacheHits && state.cacheHits[d] === true;
-    edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone, cached: isCached });
-    drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, isCached);
+    edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
+    drawDashedLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
   });
 
   const cross = findNode('crosscheck');
   if (cross) {
-    // Experts -> Cross-Check (bezier curves)
+    // Experts -> Cross-Check
     domains.forEach((d, i) => {
       const ex = cx + (i - (expertCount - 1) / 2) * EXPERT_GAP;
       const srcX = ex + NODE_W / 2;
@@ -331,7 +324,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
       const isActiveLine = active === 'cross_check' || active === 'experts';
       const isDone = expertComplete[d] && completed.crosscheck;
       edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
-      drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, false);
+      drawDashedLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
     });
 
     const synth = findNode('synthesizer');
@@ -343,7 +336,7 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
       const isActiveLine = active === 'synthesizer' || active === 'cross_check';
       const isDone = completed.crosscheck && completed.synthesizer;
       edges.push({ x1: srcX, y1: srcY, x2: tgtX, y2: tgtY, active: isActiveLine, done: isDone });
-      drawBezier(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone, false);
+      drawDashedLine(ctx, srcX, srcY, tgtX, tgtY, isActiveLine, isDone);
     }
   }
 
@@ -354,20 +347,15 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
     const t = (now * 0.4) % 1;
     const px = edge.x1 + (edge.x2 - edge.x1) * t;
     const py = edge.y1 + (edge.y2 - edge.y1) * t;
-    ctx.save();
-    ctx.shadowColor = '#C8956A';
-    ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(px, py, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#C8956A';
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#000000';
     ctx.fill();
-    ctx.restore();
   });
 
   // Cross-examination confidence arcs
   if (state.crossCheckResult && state.crossCheckResult.contradictions) {
-    const contradictions = state.crossCheckResult.contradictions;
-    contradictions.forEach((contra, idx) => {
+    state.crossCheckResult.contradictions.forEach((contra, idx) => {
       if (contra.domains && contra.domains.length >= 2) {
         const n1 = findNode(`expert-${contra.domains[0]}`);
         const n2 = findNode(`expert-${contra.domains[1]}`);
@@ -390,50 +378,34 @@ function drawConnections(ctx, w, h, state, active, completed, expertComplete) {
   }
 }
 
-/**
- * Draw a bezier curve between two points.
- */
-function drawBezier(ctx, x1, y1, x2, y2, isActive, isDone, isCached) {
+function drawDashedLine(ctx, x1, y1, x2, y2, isActive, isDone) {
+  const colors = getNodeColors();
   ctx.save();
+
   ctx.beginPath();
-
-  const cy = (y1 + y2) / 2;
-  const cpx1 = x1;
-  const cpy1 = cy;
-  const cpx2 = x2;
-  const cpy2 = cy;
-
   ctx.moveTo(x1, y1);
-  ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, x2, y2);
+  ctx.lineTo(x2, y2);
 
-  if (isCached) {
-    ctx.strokeStyle = '#7DB88A';
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 2;
-  } else if (isDone) {
-    ctx.strokeStyle = 'rgba(200, 149, 106, 0.5)';
-    ctx.lineWidth = 2;
+  if (isDone) {
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
   } else if (isActive) {
-    const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    grad.addColorStop(0, '#C8956A');
-    grad.addColorStop(1, '#D4A574');
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#C8956A';
-    ctx.shadowBlur = 12;
-  } else {
-    ctx.strokeStyle = 'rgba(74, 48, 32, 0.5)';
+    ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+  } else {
+    ctx.strokeStyle = colors.connectionLine;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
   }
   ctx.stroke();
   ctx.setLineDash([]);
   ctx.restore();
 }
 
-/**
- * Draw a confidence arc between two expert nodes for cross-examination.
- */
 function drawConfidenceArc(ctx, n1, n2, type, index) {
+  const colors = getNodeColors();
   const x1 = n1.x + NODE_W / 2;
   const y1 = n1.y + NODE_H / 2;
   const x2 = n2.x + NODE_W / 2;
@@ -444,25 +416,23 @@ function drawConfidenceArc(ctx, n1, n2, type, index) {
   const arcHeight = type === 'conflict' ? -20 : 20;
 
   ctx.save();
-
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.quadraticCurveTo(mx, my + arcHeight, x2, y2);
 
-  const color = type === 'conflict' ? '#C86B5A' : '#7DB88A';
-  const alpha = type === 'conflict' ? 0.5 : 0.4;
-  ctx.strokeStyle = hexToRgba(color, alpha);
-  ctx.lineWidth = type === 'conflict' ? 2 : 1.5;
+  const color = type === 'conflict' ? '#d97706' : '#0d9488';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = type === 'conflict' ? 1.5 : 1;
   ctx.setLineDash(type === 'conflict' ? [] : [3, 3]);
+  ctx.globalAlpha = 0.4;
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Small label
-  ctx.fillStyle = hexToRgba(color, 0.7);
-  ctx.font = '400 8px "JetBrains Mono", monospace';
+  ctx.fillStyle = color;
+  ctx.font = '400 9px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const label = type === 'conflict' ? '✗' : '✓';
+  const label = type === 'conflict' ? '!' : '✓';
   ctx.fillText(label, mx, my + arcHeight + (type === 'conflict' ? -8 : 8));
 
   ctx.restore();
@@ -471,8 +441,9 @@ function drawConfidenceArc(ctx, n1, n2, type, index) {
 function renderMinimap(state, mainW, mainH) {
   const mCanvas = document.getElementById('minimap-canvas');
   if (!mCanvas) return;
-  const mw = 140;
-  const mh = 90;
+  const colors = getNodeColors();
+  const mw = 120;
+  const mh = 80;
   mCanvas.width = mw * window.devicePixelRatio;
   mCanvas.height = mh * window.devicePixelRatio;
   mCanvas.style.width = mw + 'px';
@@ -480,7 +451,7 @@ function renderMinimap(state, mainW, mainH) {
   const mCtx = mCanvas.getContext('2d');
   mCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  mCtx.fillStyle = '#2E1F15';
+  mCtx.fillStyle = colors.bg;
   mCtx.fillRect(0, 0, mw, mh);
 
   const scaleX = mw / mainW;
@@ -494,42 +465,24 @@ function renderMinimap(state, mainW, mainH) {
 
   nodes.forEach(n => {
     if (n.isThinking) return;
-    const color = n.color || resolveColor(getNodeColor(n.type));
-    mCtx.fillStyle = hexToRgba(color, 0.5);
+    const badgeColor = BADGE_COLORS[n.type] || BADGE_COLORS.default;
+    mCtx.fillStyle = badgeColor;
+    mCtx.globalAlpha = 0.5;
     mCtx.fillRect(n.x, n.y, NODE_W, NODE_H);
+    mCtx.globalAlpha = 1;
   });
 
-  // Viewport indicator — warm peach
+  // Viewport indicator
   const vw = mainW / scale;
   const vh = mainH / scale;
   const vx = -offsetX / scale;
   const vy = -offsetY / scale;
-  mCtx.strokeStyle = 'rgba(200, 149, 106, 0.25)';
-  mCtx.lineWidth = 1;
+  mCtx.strokeStyle = colors.text;
+  mCtx.lineWidth = 0.5;
+  mCtx.globalAlpha = 0.3;
   mCtx.strokeRect(vx, vy, vw, vh);
 
   mCtx.restore();
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 export function startAnimation() {
@@ -569,9 +522,6 @@ export function getNodes() { return nodes; }
 // HIT TESTING — Find which node is at a given canvas coordinate
 // ================================================================
 
-/**
- * Convert screen coordinates to canvas-space coordinates.
- */
 function screenToCanvas(clientX, clientY) {
   const rect = canvasEl.getBoundingClientRect();
   const px = (clientX - rect.left) * (canvasW / rect.width);
@@ -582,9 +532,6 @@ function screenToCanvas(clientX, clientY) {
   };
 }
 
-/**
- * Find the node at the given canvas-space coordinates.
- */
 function hitTestNodes(canvasX, canvasY) {
   for (let i = nodes.length - 1; i >= 0; i--) {
     const n = nodes[i];
@@ -629,14 +576,12 @@ export function initCanvas() {
 
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 1 || isSpaceDown) {
-      // Middle mouse or space+drag -> pan
       isPanning = true;
       startX = e.clientX - offsetX;
       startY = e.clientY - offsetY;
       canvas.style.cursor = 'grabbing';
       e.preventDefault();
     } else if (e.button === 0) {
-      // Left click -> select node or start panning if near edge
       const pt = screenToCanvas(e.clientX, e.clientY);
       const hit = hitTestNodes(pt.x, pt.y);
       if (hit) {
@@ -647,7 +592,6 @@ export function initCanvas() {
         selectedNodeId = null;
         setState({ selectedNode: null });
         hideNodeTooltip();
-        // Start panning on left click on empty space
         isPanning = true;
         startX = e.clientX - offsetX;
         startY = e.clientY - offsetY;
@@ -661,7 +605,6 @@ export function initCanvas() {
       offsetX = e.clientX - startX;
       offsetY = e.clientY - startY;
     } else {
-      // Hover detection for tooltip
       const pt = screenToCanvas(e.clientX, e.clientY);
       const hit = hitTestNodes(pt.x, pt.y);
       if (hit && hit !== hoveredNode) {
@@ -695,7 +638,6 @@ export function initCanvas() {
     const pt = screenToCanvas(e.clientX, e.clientY);
     const hit = hitTestNodes(pt.x, pt.y);
     if (hit) {
-      // Zoom into clicked node
       scale = Math.min(scale * 1.5, 3);
       offsetX = e.clientX - (canvasW / 2) * scale;
       offsetY = e.clientY - (canvasH / 2) * scale;
@@ -726,26 +668,26 @@ function showNodeTooltip(screenX, screenY, node) {
     if (expert) {
       content += `<br>Confidence: ${expert.confidence || 'medium'}`;
       if (expert.model_used) content += `<br>Model: ${expert.model_used}`;
-      if (node.cached) content += `<br><span style="color:#7DB88A">⚡ From cache</span>`;
+      if (node.cached) content += `<br>⚡ From cache`;
     }
     if (node.streaming) {
       const streamingData = state.streamingNodes[node.type];
       if (streamingData && streamingData.tokens) {
         const preview = streamingData.tokens.slice(-60);
-        content += `<br><span style="color:#C8956A">▶ Streaming:</span> <span style="color:#C4A898;font-size:10px">${escapeHtml(preview)}</span>`;
+        content += `<br>▶ Streaming: ${escapeHtml(preview)}`;
       } else {
-        content += `<br><span style="color:#C8956A">▶ Generating...</span>`;
+        content += `<br>▶ Generating...`;
       }
     }
   } else if (node.isThinking) {
     content = `<strong>${node.label}</strong>`;
     if (node.content) {
-      content += `<br><span style="font-size:10px">${escapeHtml(node.content.slice(0, 80))}${node.content.length > 80 ? '...' : ''}</span>`;
+      content += `<br>${escapeHtml(node.content.slice(0, 80))}${node.content.length > 80 ? '...' : ''}`;
     }
   } else {
     content = `<strong>${node.label}</strong>`;
     if (node.streaming) {
-      content += `<br><span style="color:#C8956A">▶ Processing...</span>`;
+      content += `<br>▶ Processing...`;
     }
     if (node.type === 'crosscheck' && state.crossCheckResult) {
       const deps = state.contradictions.length;
@@ -757,7 +699,6 @@ function showNodeTooltip(screenX, screenY, node) {
   tooltipEl.innerHTML = content;
   tooltipEl.classList.remove('hidden');
 
-  // Position tooltip
   const rect = canvasEl.getBoundingClientRect();
   let tx = screenX - rect.left + 16;
   let ty = screenY - rect.top - 10;
@@ -784,36 +725,47 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 // ================================================================
-// THINKING NODE (R1 reasoning)
+// THINKING NODE
 // ================================================================
 
 function drawThinkingNode(ctx, node) {
-  const color = node.color || resolveColor('--accent');
+  const colors = getNodeColors();
   ctx.save();
 
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = hexToRgba(color, 0.6);
-  ctx.lineWidth = 1.5;
-  ctx.fillStyle = hexToRgba(color, 0.06);
-  roundRect(ctx, node.x, node.y, NODE_W, NODE_H + 16, NODE_R);
-  ctx.fill();
-  ctx.stroke();
+  ctx.strokeStyle = colors.dimBorder;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(node.x, node.y, NODE_W, NODE_H + 16);
+  ctx.strokeRect(node.x, node.y, NODE_W, NODE_H + 16);
   ctx.setLineDash([]);
 
-  ctx.fillStyle = hexToRgba('#F5EDE6', 0.7);
-  ctx.font = '400 10px "JetBrains Mono", monospace';
+  ctx.fillStyle = colors.dimText;
+  ctx.font = '400 10px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
-  ctx.fillStyle = hexToRgba(color, 0.7);
-  ctx.font = '12px sans-serif';
-  ctx.fillText('\u24d8', node.x + 10, node.y + NODE_H / 2 + 8);
+  ctx.fillText('ⓘ', node.x + 10, node.y + (NODE_H + 16) / 2);
 
-  ctx.fillStyle = hexToRgba('#F5EDE6', 0.6);
-  ctx.font = '400 10px "DM Sans", sans-serif';
+  ctx.fillStyle = colors.dimText;
+  ctx.font = '400 10px -apple-system, BlinkMacSystemFont, sans-serif';
   const label = (node.label || 'Reasoning').substring(0, 20);
-  ctx.fillText(label, node.x + 28, node.y + NODE_H / 2 + 8);
+  ctx.fillText(label, node.x + 28, node.y + (NODE_H + 16) / 2);
 
   ctx.restore();
 }
@@ -828,6 +780,7 @@ export function renderCascadeTree(state) {
   const canvas = document.getElementById('main-canvas');
   if (!canvas) return;
 
+  const colors = getNodeColors();
   const rect = canvas.parentElement.getBoundingClientRect();
   canvas.width = rect.width * window.devicePixelRatio;
   canvas.height = rect.height * window.devicePixelRatio;
@@ -864,14 +817,16 @@ export function renderCascadeTree(state) {
         ctx2.beginPath();
         ctx2.moveTo(x2, y + 36);
         ctx2.lineTo(x2, y + 80);
-        ctx2.strokeStyle = 'rgba(200, 149, 106, 0.15)';
+        ctx2.strokeStyle = colors.connectionLine;
         ctx2.lineWidth = 0.5;
+        ctx2.setLineDash([3, 3]);
         ctx2.stroke();
+        ctx2.setLineDash([]);
       }
     });
 
-    ctx2.fillStyle = '#8A7068';
-    ctx2.font = '400 9px "JetBrains Mono", monospace';
+    ctx2.fillStyle = colors.dimText;
+    ctx2.font = '400 9px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx2.textAlign = 'right';
     ctx2.textBaseline = 'middle';
     ctx2.fillText(levelLabels[levelIdx], 80, y + 18);
@@ -882,34 +837,25 @@ export function renderCascadeTree(state) {
 }
 
 function drawCascadeNode(ctx, node, level, index) {
-  const colors = {
-    0: '#7AADCC',
-    1: '#D4A843',
-    2: '#C86B5A',
-    3: '#9B7DC8',
-    4: '#7DB88A',
-  };
+  const colors = ['#2563eb', '#7c3aed', '#0d9488', '#d97706', '#2563eb'];
   const color = colors[level] || colors[0];
   const tnW = 140;
   const tnH = 36;
-  const tnR = 6;
 
   ctx.save();
 
-  ctx.fillStyle = hexToRgba(color, 0.12);
-  ctx.strokeStyle = hexToRgba(color, 0.5);
+  ctx.strokeStyle = color;
   ctx.lineWidth = 1;
-  roundRect(ctx, node.x, node.y, tnW, tnH, tnR);
-  ctx.fill();
-  ctx.stroke();
+  ctx.fillStyle = colors.bg;
+  ctx.fillRect(node.x, node.y, tnW, tnH);
+  ctx.strokeRect(node.x, node.y, tnW, tnH);
 
   ctx.fillStyle = color;
   ctx.font = '10px sans-serif';
-  const icons = ['\u2460', '\u2461', '\u2462', '\u2606', '\u2716'];
-  ctx.fillText(icons[level] || '\u2460', node.x + 10, node.y + tnH / 2 + 4);
+  ctx.fillText('○', node.x + 10, node.y + tnH / 2 + 4);
 
-  ctx.fillStyle = '#F5EDE6';
-  ctx.font = '400 10px "DM Sans", sans-serif';
+  ctx.fillStyle = colors.text;
+  ctx.font = '400 10px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const label = (node.label || '').substring(0, 18);
@@ -944,6 +890,3 @@ export function clearChatPanel() {
     messages.innerHTML = '';
   }
 }
-
-// Re-export for app.js that imports from store
-import { setState } from './store.js';

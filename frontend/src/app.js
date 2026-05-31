@@ -130,27 +130,29 @@ export function init() {
     });
   }
 
-  // ---- Ghost Mode selector ----
-  document.querySelectorAll('.ghost-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      const level = opt.dataset.level;
-      if (!level) return;
-      document.querySelectorAll('.ghost-option').forEach(o => o.classList.remove('active'));
-      opt.classList.add('active');
-      setState({ ghostLevel: level });
-      updateGhostUI(level);
-    });
-  });
-
   // ---- Analysis Mode selector ----
-  document.querySelectorAll('.mode-option').forEach(opt => {
+  document.querySelectorAll('.sidebar-item[data-mode]').forEach(opt => {
     opt.addEventListener('click', () => {
       const mode = opt.dataset.mode;
       if (!mode) return;
-      document.querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+      document.querySelectorAll('.sidebar-item[data-mode]').forEach(o => o.classList.remove('active'));
       opt.classList.add('active');
       setState({ analysisMode: mode });
-      document.getElementById('mode-badge-static').textContent = opt.querySelector('.mode-option-label')?.textContent || mode;
+      const labelText = opt.querySelector('span:last-child')?.textContent || mode;
+      document.getElementById('mode-badge-static').textContent = labelText;
+      document.getElementById('mode-badge').textContent = labelText;
+    });
+  });
+
+  // ---- Ghost Mode selector ----
+  document.querySelectorAll('.sidebar-item[data-level]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const level = opt.dataset.level;
+      if (!level) return;
+      document.querySelectorAll('.sidebar-item[data-level]').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      setState({ ghostLevel: level });
+      updateGhostUI(level);
     });
   });
 
@@ -252,6 +254,7 @@ export function init() {
   // ---- Subscriptions ----
   subscribe('status', updateButtons);
   subscribe('status', updateModeBadge);
+  subscribe('status', toggleStaticNodes);
   subscribe('status', (status) => {
     if (status === 'completed') {
       setTimeout(showChat, 500);
@@ -639,6 +642,7 @@ function startAnalysis() {
     cacheEnabled: s.cacheEnabled !== false,
     ragEnabled: s.ragEnabled !== false,
     enrichmentEnabled: s.enrichmentEnabled !== false,
+    groqApiKey: s.groqApiKey,
   });
 }
 
@@ -690,25 +694,21 @@ function rerunAnalysis() {
     cacheEnabled: s.cacheEnabled !== false,
     ragEnabled: s.ragEnabled !== false,
     enrichmentEnabled: s.enrichmentEnabled !== false,
+    groqApiKey: s.groqApiKey,
   });
 }
 
 function switchMode(mode) {
   const s = getState();
   setState({ mode });
-  document.querySelectorAll('.mode-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.mode === mode);
-  });
   document.getElementById('case-files-section').classList.toggle('hidden', mode !== 'case-study');
   document.getElementById('node-builder-section').classList.toggle('hidden', mode !== 'case-study');
   document.getElementById('question-input').classList.toggle('hidden', mode === 'case-study');
   document.getElementById('case-question-input').classList.toggle('hidden', mode !== 'case-study');
   const btnAnalyze = document.getElementById('btn-analyze');
+  btnAnalyze.textContent = 'Analyze \u2192';
   if (mode === 'case-study') {
-    btnAnalyze.textContent = 'Analyze →';
     updateCaseNodeList();
-  } else {
-    btnAnalyze.textContent = 'Analyze →';
   }
   updateModeBadge();
   switchTab('verdict');
@@ -722,6 +722,17 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(t => {
     t.classList.toggle('active', t.id === 'tab-' + tab);
   });
+}
+
+function toggleStaticNodes(status) {
+  const staticNodes = document.getElementById('static-nodes');
+  if (!staticNodes) return;
+  // Hide static nodes when processing or completed, show when idle
+  if (status === 'idle') {
+    staticNodes.classList.remove('hidden');
+  } else {
+    staticNodes.classList.add('hidden');
+  }
 }
 
 function updateButtons(status) {

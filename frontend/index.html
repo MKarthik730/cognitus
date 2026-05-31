@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cognitus — Multi-perspective AI Reasoning</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/styles.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -14,121 +12,106 @@
 <body>
   <div id="app" class="app-layout">
 
-    <!-- LEFT PANEL -->
+    <!-- ==================== LEFT SIDEBAR (220px) ==================== -->
     <aside id="left-panel" class="panel-left">
       <div class="panel-left-inner">
-        <div class="brand">
-          <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 4a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-2.5C8.8 10.8 8 9.5 8 8a4 4 0 0 1 4-4z"/>
-            <path d="M10 19h4"/>
-            <path d="M12 21v-3"/>
+
+        <!-- Logo -->
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
           </svg>
-          <span class="brand-name">Cognitus</span>
+          <span class="logo-text">cognitus</span>
         </div>
 
-        <div id="mode-badge-static" class="mode-badge-static">Standard</div>
+        <!-- Mode pill (static) -->
+        <div id="mode-badge-static" class="mode-pill-static">Standard</div>
 
-        <!-- Ghost Mode Indicator -->
+        <!-- Ghost Indicator -->
         <div id="ghost-indicator" class="ghost-indicator hidden">
-          <div class="ghost-indicator-icon">&#x1F47B;</div>
+          <span class="ghost-indicator-icon">&#x1F47B;</span>
           <div class="ghost-indicator-info">
             <span id="ghost-level-label" class="ghost-level-label">Fog</span>
             <span id="ghost-timer" class="ghost-timer">23:47:12</span>
           </div>
         </div>
 
-        <!-- Privacy Disclosure (ghost mode) -->
+        <!-- Privacy Disclosure -->
         <div id="privacy-disclosure" class="privacy-disclosure hidden">
-          <div class="privacy-disclosure-text" id="privacy-disclosure-text"></div>
+          <div id="privacy-disclosure-text" class="privacy-disclosure-text"></div>
         </div>
 
-        <!-- Analysis Mode Selector -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">Analysis Mode</span>
-          </div>
-          <div id="analysis-mode-selector" class="analysis-mode-selector">
-            <div class="mode-option active" data-mode="standard">
-              <span class="mode-option-icon">&bull;</span>
-              <span class="mode-option-label">Standard</span>
+        <!-- Analysis Mode Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-label">Analysis Mode</div>
+          <div id="analysis-mode-selector" class="sidebar-list">
+            <div class="sidebar-item active" data-mode="standard">
+              <span class="sidebar-dot"></span>
+              <span>Standard</span>
             </div>
-            <div class="mode-option" data-mode="signal_vs_noise">
-              <span class="mode-option-icon">&#x25C6;</span>
-              <span class="mode-option-label">Signal vs Noise</span>
+            <div class="sidebar-item" data-mode="signal_vs_noise">
+              <span class="sidebar-icon">&#x25C6;</span>
+              <span>Signal vs Noise</span>
             </div>
-            <div class="mode-option" data-mode="cascade_mapper">
-              <span class="mode-option-icon">&#x25B3;</span>
-              <span class="mode-option-label">Cascade Mapper</span>
+            <div class="sidebar-item" data-mode="cascade_mapper">
+              <span class="sidebar-icon">&#x25B3;</span>
+              <span>Cascade Mapper</span>
             </div>
-            <div class="mode-option" data-mode="pre_mortem">
-              <span class="mode-option-icon">&#x2718;</span>
-              <span class="mode-option-label">Pre-Mortem</span>
+            <div class="sidebar-item" data-mode="pre_mortem">
+              <span class="sidebar-icon">&#x2718;</span>
+              <span>Pre-Mortem</span>
             </div>
-            <div class="mode-option" data-mode="debate">
-              <span class="mode-option-icon">&#x2696;</span>
-              <span class="mode-option-label">Debate</span>
+            <div class="sidebar-item" data-mode="debate">
+              <span class="sidebar-icon">&#x2696;</span>
+              <span>Debate</span>
             </div>
-            <div class="mode-option" data-mode="reverse_engineer">
-              <span class="mode-option-icon">&#x21B6;</span>
-              <span class="mode-option-label">Reverse Engineer</span>
+            <div class="sidebar-item" data-mode="reverse_engineer">
+              <span class="sidebar-icon">&#x21B6;</span>
+              <span>Reverse Engineer</span>
             </div>
-            <div class="mode-option" data-mode="iceberg">
-              <span class="mode-option-icon">&#x25BD;</span>
-              <span class="mode-option-label">Iceberg Report</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Ghost Level Selector -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">Privacy</span>
-          </div>
-          <div id="ghost-level-selector" class="ghost-level-selector">
-            <div class="ghost-option active" data-level="off">
-              <span class="ghost-dot"></span>
-              <span class="ghost-label">Standard</span>
-            </div>
-            <div class="ghost-option" data-level="fog">
-              <span class="ghost-dot fog"></span>
-              <span class="ghost-label">Fog</span>
-            </div>
-            <div class="ghost-option" data-level="shadow">
-              <span class="ghost-dot shadow"></span>
-              <span class="ghost-label">Shadow</span>
-            </div>
-            <div class="ghost-option" data-level="void">
-              <span class="ghost-dot void"></span>
-              <span class="ghost-label">Void</span>
-            </div>
-            <div class="ghost-option" data-level="phantom">
-              <span class="ghost-dot phantom"></span>
-              <span class="ghost-label">Phantom</span>
+            <div class="sidebar-item" data-mode="iceberg">
+              <span class="sidebar-icon">&#x25BD;</span>
+              <span>Iceberg Report</span>
             </div>
           </div>
         </div>
 
-        <!-- Nodes Section -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">Nodes</span>
-            <span id="node-count" class="section-badge">0</span>
-          </div>
-          <div id="node-list" class="node-list">
-            <div class="node-list-empty">No nodes selected yet</div>
+        <!-- Privacy Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-label">Privacy</div>
+          <div id="ghost-level-selector" class="sidebar-list">
+            <div class="sidebar-item active" data-level="off">
+              <span class="sidebar-dot"></span>
+              <span>Standard</span>
+            </div>
+            <div class="sidebar-item" data-level="fog">
+              <span class="sidebar-dot fog"></span>
+              <span>Fog</span>
+            </div>
+            <div class="sidebar-item" data-level="shadow">
+              <span class="sidebar-dot shadow"></span>
+              <span>Shadow</span>
+            </div>
+            <div class="sidebar-item" data-level="void">
+              <span class="sidebar-dot void"></span>
+              <span>Void</span>
+            </div>
+            <div class="sidebar-item" data-level="phantom">
+              <span class="sidebar-dot phantom"></span>
+              <span>Phantom</span>
+            </div>
           </div>
         </div>
 
-        <!-- Cache Controls -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">Cache</span>
-          </div>
+        <!-- Cache Toggle -->
+        <div class="sidebar-section">
           <div class="toggle-row">
             <label class="toggle-label">
               <input type="checkbox" id="toggle-cache" checked />
               <span class="toggle-slider"></span>
-              <span class="toggle-text">Enable caching</span>
+              <span class="toggle-text">Caching</span>
             </label>
             <button id="btn-clear-cache" class="btn-small">Clear</button>
           </div>
@@ -136,10 +119,7 @@
         </div>
 
         <!-- RAG Toggle -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">RAG</span>
-          </div>
+        <div class="sidebar-section">
           <div class="toggle-row">
             <label class="toggle-label">
               <input type="checkbox" id="toggle-rag" checked />
@@ -150,40 +130,39 @@
         </div>
 
         <!-- Enrichment Toggle -->
-        <div class="panel-section">
-          <div class="section-header">
-            <span class="section-title">Enrichment</span>
-          </div>
+        <div class="sidebar-section">
           <div class="toggle-row">
             <label class="toggle-label">
               <input type="checkbox" id="toggle-enrichment" checked />
               <span class="toggle-slider"></span>
-              <span class="toggle-text">External data</span>
+              <span class="toggle-text">Enrichment</span>
             </label>
           </div>
         </div>
 
-        <!-- Assumption Excavator Results -->
-        <div id="assumptions-section" class="panel-section hidden">
-          <div class="section-header">
-            <span class="section-title">Assumptions</span>
+        <!-- Node List -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-label">Nodes</div>
+          <div id="node-list" class="node-list">
+            <div class="node-list-empty">No nodes selected yet</div>
           </div>
+        </div>
+
+        <!-- Assumptions Section -->
+        <div id="assumptions-section" class="sidebar-section hidden">
+          <div class="sidebar-section-label">Assumptions</div>
           <div id="assumptions-list" class="assumptions-list"></div>
         </div>
 
         <!-- Situation DNA -->
-        <div id="dna-section" class="panel-section hidden">
-          <div class="section-header">
-            <span class="section-title">Situation DNA</span>
-          </div>
+        <div id="dna-section" class="sidebar-section hidden">
+          <div class="sidebar-section-label">Situation DNA</div>
           <div id="dna-list" class="dna-list"></div>
         </div>
 
         <!-- Case Files (hidden by default) -->
-        <div id="case-files-section" class="panel-section hidden">
-          <div class="section-header">
-            <span class="section-title">Case Files</span>
-          </div>
+        <div id="case-files-section" class="sidebar-section hidden">
+          <div class="sidebar-section-label">Case Files</div>
           <div id="drop-zone" class="drop-zone hidden">
             <svg class="drop-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -198,75 +177,151 @@
           <div id="file-chips" class="file-chips"></div>
         </div>
 
-        <div id="node-builder-section" class="panel-section hidden">
-          <div class="section-header">
-            <span class="section-title">Expert Nodes</span>
-            <div class="section-header-right">
-              <span id="case-node-count" class="section-badge">0</span>
-              <div id="presets-wrapper" style="position:relative">
-                <button id="btn-presets" class="btn-icon-sm" title="Templates">+</button>
-                <div id="presets-dropdown" class="preset-dropdown hidden"></div>
-              </div>
+        <!-- Node Builder (case study) -->
+        <div id="node-builder-section" class="sidebar-section hidden">
+          <div class="sidebar-section-label">Expert Nodes</div>
+          <div id="case-node-list" class="case-node-list"></div>
+          <div class="sidebar-section-actions">
+            <button id="btn-add-case-node" class="btn-small">+ Add Node</button>
+            <div id="presets-wrapper" style="position:relative">
+              <button id="btn-presets" class="btn-small" title="Templates">Templates</button>
+              <div id="presets-dropdown" class="preset-dropdown hidden"></div>
             </div>
           </div>
-          <div id="case-node-list" class="case-node-list"></div>
-          <button id="btn-add-case-node" class="btn-ghost-dashed">+ Add Node</button>
         </div>
 
-        <div class="panel-footer">
-          <button id="btn-settings" class="btn-icon" title="Settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
+        <!-- Footer: nodes count -->
+        <div class="sidebar-footer">
+          <span id="node-count" class="nodes-count">0</span>
+          <span class="nodes-count-label">nodes</span>
         </div>
+
       </div>
     </aside>
 
-    <!-- RESIZER LEFT -->
-    <div id="resizer-left" class="resizer" data-resizer="left"></div>
-
-    <!-- CENTER PANEL -->
+    <!-- ==================== CENTER PANEL ==================== -->
     <main id="center-panel" class="panel-center">
-      <div class="top-bar">
-        <span id="mode-badge" class="mode-badge">Standard</span>
+
+      <!-- Top Bar -->
+      <div class="topbar">
+        <span id="mode-badge" class="mode-pill">Standard</span>
+
         <!-- Streaming Indicator -->
         <div id="streaming-indicator" class="streaming-indicator hidden">
           <span class="streaming-dot"></span>
-          <span class="streaming-text">▶ Streaming</span>
+          <span class="streaming-text">&#x25B6; Streaming</span>
         </div>
-        <!-- PII Redaction Banner -->
+
+        <!-- PII Banner -->
         <div id="pii-banner" class="pii-banner hidden">
           <span class="pii-banner-icon">&#x26A0;</span>
           <span class="pii-banner-text">PII detected</span>
           <button id="btn-view-redactions" class="btn-small">View</button>
         </div>
-        <div class="question-bar">
-          <div id="reconnect-indicator" class="reconnect-indicator hidden">
-            <span class="reconnect-dot"></span>
-            <span id="reconnect-text" class="reconnect-text">Reconnecting&hellip;</span>
-          </div>
-          <input id="question-input" type="text" class="question-input" placeholder="Describe a situation or ask a question..." />
-          <input id="case-question-input" type="text" class="question-input hidden" placeholder="Enter a guiding question for the panel..." />
-          <button id="btn-analyze" class="btn-primary">Analyze &rarr;</button>
-          <button id="btn-stop" class="btn-stop hidden">Stop</button>
-          <button id="btn-retry" class="btn-retry hidden" title="Retry connection">Retry</button>
+
+        <!-- Reconnect Indicator -->
+        <div id="reconnect-indicator" class="reconnect-indicator hidden">
+          <span class="reconnect-dot"></span>
+          <span id="reconnect-text" class="reconnect-text">Reconnecting&hellip;</span>
         </div>
-        <!-- Ghost Timer Display -->
+
+        <!-- Ghost Timer Bar -->
         <div id="ghost-timer-bar" class="ghost-timer-bar hidden">
           <span class="ghost-timer-label">Ghost: </span>
           <span id="ghost-timer-countdown" class="ghost-timer-countdown">23:47:12</span>
         </div>
-      </div>
-      <div class="canvas-wrapper">
-        <canvas id="main-canvas" class="main-canvas"></canvas>
-        <div class="canvas-controls">
-          <button id="btn-zoom-in" class="btn-icon-sm" title="Zoom In">+</button>
-          <button id="btn-zoom-out" class="btn-icon-sm" title="Zoom Out">&minus;</button>
-          <button id="btn-fit" class="btn-icon-sm" title="Fit View">&#x21f0;</button>
-          <button id="btn-stress-test" class="btn-icon-sm hidden" title="Stress Test Verdict">&#x2691;</button>
+
+        <!-- Enrichment Indicator -->
+        <div id="enrichment-indicator" class="enrichment-indicator hidden">
+          <span class="enrichment-status-text"></span>
         </div>
+
+        <!-- RAG Indicator -->
+        <div id="rag-indicator" class="rag-indicator hidden">
+          <span class="rag-status-text"></span>
+        </div>
+
+        <!-- Search Input -->
+        <div class="search-bar">
+          <input id="question-input" type="text" class="search-input" placeholder="Describe a situation or ask a question..." />
+          <input id="case-question-input" type="text" class="search-input hidden" placeholder="Enter a guiding question for the panel..." />
+        </div>
+
+        <!-- Analyze Button -->
+        <button id="btn-analyze" class="btn-primary">Analyze &rarr;</button>
+        <button id="btn-stop" class="btn-stop hidden">Stop</button>
+        <button id="btn-retry" class="btn-retry hidden" title="Retry connection">Retry</button>
+      </div>
+
+      <!-- Canvas Wrapper -->
+      <div class="canvas-wrapper">
+        <!-- Dot grid background -->
+        <div class="dot-grid"></div>
+
+        <!-- Main Canvas (dynamic rendering) -->
+        <canvas id="main-canvas" class="main-canvas"></canvas>
+
+        <!-- Static Node Layout (shown when idle) -->
+        <div id="static-nodes" class="static-nodes">
+          <!-- SVG Connections -->
+          <svg class="connections-svg" width="100%" height="100%">
+            <line class="conn-line" x1="50%" y1="70" x2="50%" y2="175" />
+            <line class="conn-line" x1="50%" y1="235" x2="50%" y2="340" />
+            <line class="conn-line" x1="50%" y1="400" x2="36%" y2="505" />
+            <line class="conn-line" x1="50%" y1="400" x2="64%" y2="505" />
+            <line class="conn-line" x1="36%" y1="565" x2="36%" y2="640" />
+          </svg>
+
+          <!-- Node: Distributor (selected) -->
+          <div class="node-card selected" style="top:20px; left:calc(50% - 90px)">
+            <div class="node-badge" style="background:#2563eb">D</div>
+            <div class="node-label">Distributor</div>
+          </div>
+
+          <!-- Node: Cross-Check -->
+          <div class="node-card" style="top:130px; left:calc(50% - 90px)">
+            <div class="node-badge" style="background:#7c3aed">C</div>
+            <div class="node-label">Cross-Check</div>
+          </div>
+
+          <!-- Node: Synthesizer -->
+          <div class="node-card" style="top:290px; left:calc(50% - 90px)">
+            <div class="node-badge" style="background:#0d9488">S</div>
+            <div class="node-label">Synthesizer</div>
+          </div>
+
+          <!-- Node: Verdict Gate -->
+          <div class="node-card" style="top:455px; left:calc(36% - 90px)">
+            <div class="node-badge" style="background:#d97706">V</div>
+            <div class="node-label">Verdict Gate</div>
+          </div>
+
+          <!-- Node: Report -->
+          <div class="node-card" style="top:455px; left:calc(64% - 90px)">
+            <div class="node-badge" style="background:#2563eb">R</div>
+            <div class="node-label">Report</div>
+          </div>
+
+          <!-- Node: Re-Analyze -->
+          <div class="node-card" style="top:590px; left:calc(36% - 90px)">
+            <div class="node-badge" style="background:#0d9488">R</div>
+            <div class="node-label">Re-Analyze</div>
+          </div>
+        </div>
+
+        <!-- Zoom Controls -->
+        <div class="zoom-controls">
+          <button id="btn-zoom-in" class="zoom-btn" title="Zoom In">+</button>
+          <button id="btn-zoom-out" class="zoom-btn" title="Zoom Out">−</button>
+          <button id="btn-fit" class="zoom-btn" title="Fit View">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+              <path d="M2 6V2h4M14 10v4h-4M2 10v4h4M14 6V2h-4"/>
+            </svg>
+          </button>
+          <button id="btn-stress-test" class="zoom-btn hidden" title="Stress Test Verdict">&#x2691;</button>
+        </div>
+
+        <!-- Minimap -->
         <canvas id="minimap-canvas" class="minimap-canvas"></canvas>
 
         <!-- Chat Panel -->
@@ -282,7 +337,7 @@
           </div>
         </div>
 
-        <!-- Assumption Excavator Modal -->
+        <!-- Assumption Modal -->
         <div id="assumption-modal" class="modal-overlay hidden">
           <div class="modal-content">
             <div class="modal-header">
@@ -294,27 +349,27 @@
               <div id="assumption-modal-list" class="assumption-modal-list"></div>
             </div>
             <div class="modal-footer">
-              <button id="assumption-confirm-all" class="btn-primary btn-small">Confirm All</button>
-              <button id="assumption-proceed" class="btn-primary btn-small">Proceed with Confirmed</button>
+              <button id="assumption-confirm-all" class="btn-primary">Confirm All</button>
+              <button id="assumption-proceed" class="btn-primary">Proceed with Confirmed</button>
             </div>
           </div>
         </div>
       </div>
     </main>
 
-    <!-- RESIZER RIGHT -->
-    <div id="resizer-right" class="resizer" data-resizer="right"></div>
-
-    <!-- RIGHT PANEL -->
+    <!-- ==================== RIGHT PANEL (220px) ==================== -->
     <aside id="right-panel" class="panel-right">
       <div class="panel-right-inner">
-        <div class="right-header">
-          <span class="right-title">Analysis</span>
-          <div class="right-header-actions">
-            <button id="btn-run-eval" class="btn-small" title="Run Eval Harness">Eval</button>
+
+        <!-- Tabs -->
+        <div class="right-tabs">
+          <button class="right-tab active" data-tab="analysis">Analysis</button>
+          <button class="right-tab" data-tab="eval" id="btn-run-eval">Eval</button>
+          <button class="right-tab" data-tab="outputs">Outputs</button>
+          <div class="right-tab-actions">
             <div id="export-wrapper" style="position:relative">
               <button id="btn-export" class="btn-icon" title="Export Analysis">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>
                   <line x1="12" y1="15" x2="12" y2="3"/>
@@ -327,110 +382,135 @@
               </div>
             </div>
             <button id="btn-rerun" class="btn-icon" title="Re-run Analysis">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <polyline points="23 4 23 10 17 10"/>
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="right-tabs">
-          <button class="right-tab active" data-tab="verdict">Verdict</button>
-          <button class="right-tab" data-tab="outputs">Node Outputs</button>
-        </div>
-
-        <div id="tab-verdict" class="tab-content active">
-          <div id="placeholder-idle" class="placeholder-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
-              <path d="M12 4a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V14a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-2.5C8.8 10.8 8 9.5 8 8a4 4 0 0 1 4-4z"/>
-              <path d="M10 19h4"/><path d="M12 21v-3"/>
-            </svg>
-            <span class="placeholder-text">Submit a situation to see the analysis</span>
-          </div>
-
-          <div id="verdict-content" class="verdict-content hidden">
-            <div class="verdict-card">
-              <div class="verdict-label">VERDICT</div>
-              <div id="verdict-value" class="verdict-value">—</div>
-            </div>
-
-            <!-- Confidence Breakdown -->
-            <div id="confidence-breakdown-section" class="section-block hidden">
-              <div class="section-block-title">Confidence Breakdown</div>
-              <div id="confidence-breakdown-list" class="confidence-breakdown-list"></div>
-            </div>
-
-            <div class="consensus-meter">
-              <div class="consensus-row">
-                <span class="consensus-label">Disagreement</span>
-                <span id="consensus-pct" class="consensus-pct">50%</span>
-                <span class="consensus-label">Consensus</span>
-              </div>
-              <div class="consensus-track">
-                <div id="consensus-fill" class="consensus-fill" style="width:50%"></div>
-              </div>
-            </div>
-
-            <div id="confidence-badge" class="confidence-badge medium">Medium</div>
-
-            <div class="reasoning-block">
-              <div class="reasoning-header">Reasoning</div>
-              <div id="reasoning-text" class="reasoning-text"></div>
-            </div>
-
-            <!-- Minority Report -->
-            <div id="minority-report-section" class="section-block hidden">
-              <div class="section-block-title">Minority Report</div>
-              <div id="minority-report-text" class="minority-report-text"></div>
-            </div>
-
-            <!-- What Would Change My Mind -->
-            <div id="wwcmm-section" class="section-block hidden">
-              <div class="section-block-title">This Verdict Would Change If</div>
-              <div id="wwcmm-list" class="wwcmm-list"></div>
-            </div>
-
-            <!-- Stress Test Results -->
-            <div id="stress-test-section" class="section-block hidden">
-              <div class="section-block-title">Stress Test</div>
-              <div id="stress-test-results" class="stress-test-results"></div>
-            </div>
-
-            <!-- New Mode Output -->
-            <div id="mode-output-section" class="section-block hidden">
-              <div id="mode-output-content" class="mode-output-content"></div>
-            </div>
-
-            <div id="tradeoffs-section" class="section-block hidden">
-              <div class="section-block-title">Key Trade-offs</div>
-              <div id="tradeoffs-list" class="tradeoffs-list"></div>
-            </div>
-
-            <div id="recommendations-section" class="section-block hidden">
-              <div class="section-block-title">Recommendations</div>
-              <div id="recommendations-grid" class="recommendations-grid"></div>
-            </div>
-
-            <div id="condensed-banner" class="condensed-banner hidden">
-              <span class="condensed-banner-label">Condensed</span>
-              <span class="condensed-banner-text">Case files were condensed to fit analysis limits.</span>
-            </div>
-
-            <div id="critical-findings-section" class="case-findings-card warning hidden">
-              <div class="findings-header">&#9888; Critical Findings</div>
-              <div id="critical-findings-list" class="findings-list"></div>
-            </div>
-            <div id="unresolved-section" class="case-findings-card danger hidden">
-              <div class="findings-header">&#9888; Unresolved</div>
-              <div id="unresolved-list" class="findings-list"></div>
-            </div>
-            <div id="case-recommendations-section" class="section-block hidden">
-              <div class="section-block-title">Recommendations</div>
-              <div id="case-recommendations-list" class="numbered-list"></div>
-            </div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+            </button>
           </div>
         </div>
 
+        <!-- Tab: Analysis -->
+        <div id="tab-analysis" class="tab-content active">
+          <!-- Info rows -->
+          <div class="info-panel">
+            <div class="info-row">
+              <span class="info-label">Subject</span>
+              <span id="info-subject" class="info-value">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Mode</span>
+              <span id="info-mode" class="info-value">Standard</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Status</span>
+              <span id="info-status" class="info-value">Idle</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Active Node</span>
+              <span id="info-active-node" class="info-value">—</span>
+            </div>
+          </div>
+
+          <!-- Verdict Section -->
+          <div class="verdict-section">
+            <div class="verdict-header">Verdict</div>
+
+            <div id="placeholder-idle" class="placeholder-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24" height="24">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+              <span class="placeholder-text">Submit a situation to see the analysis</span>
+            </div>
+
+            <div id="verdict-content" class="verdict-content hidden">
+              <div class="verdict-card">
+                <div class="verdict-label">VERDICT</div>
+                <div id="verdict-value" class="verdict-value">—</div>
+              </div>
+
+              <!-- Confidence Breakdown -->
+              <div id="confidence-breakdown-section" class="section-block hidden">
+                <div class="section-block-title">Confidence Breakdown</div>
+                <div id="confidence-breakdown-list" class="confidence-breakdown-list"></div>
+              </div>
+
+              <div class="consensus-meter">
+                <div class="consensus-row">
+                  <span class="consensus-label">Disagreement</span>
+                  <span id="consensus-pct" class="consensus-pct">50%</span>
+                  <span class="consensus-label">Consensus</span>
+                </div>
+                <div class="consensus-track">
+                  <div id="consensus-fill" class="consensus-fill" style="width:50%"></div>
+                </div>
+              </div>
+
+              <div id="confidence-badge" class="confidence-badge medium">Medium</div>
+
+              <div class="reasoning-block">
+                <div class="reasoning-header">Reasoning</div>
+                <div id="reasoning-text" class="reasoning-text"></div>
+              </div>
+
+              <div id="minority-report-section" class="section-block hidden">
+                <div class="section-block-title">Minority Report</div>
+                <div id="minority-report-text" class="minority-report-text"></div>
+              </div>
+
+              <div id="wwcmm-section" class="section-block hidden">
+                <div class="section-block-title">This Verdict Would Change If</div>
+                <div id="wwcmm-list" class="wwcmm-list"></div>
+              </div>
+
+              <div id="stress-test-section" class="section-block hidden">
+                <div class="section-block-title">Stress Test</div>
+                <div id="stress-test-results" class="stress-test-results"></div>
+              </div>
+
+              <div id="mode-output-section" class="section-block hidden">
+                <div id="mode-output-content" class="mode-output-content"></div>
+              </div>
+
+              <div id="tradeoffs-section" class="section-block hidden">
+                <div class="section-block-title">Key Trade-offs</div>
+                <div id="tradeoffs-list" class="tradeoffs-list"></div>
+              </div>
+
+              <div id="recommendations-section" class="section-block hidden">
+                <div class="section-block-title">Recommendations</div>
+                <div id="recommendations-grid" class="recommendations-grid"></div>
+              </div>
+
+              <div id="condensed-banner" class="condensed-banner hidden">
+                <span class="condensed-banner-label">Condensed</span>
+                <span class="condensed-banner-text">Case files were condensed to fit analysis limits.</span>
+              </div>
+
+              <div id="critical-findings-section" class="case-findings-card warning hidden">
+                <div class="findings-header">&#9888; Critical Findings</div>
+                <div id="critical-findings-list" class="findings-list"></div>
+              </div>
+              <div id="unresolved-section" class="case-findings-card danger hidden">
+                <div class="findings-header">&#9888; Unresolved</div>
+                <div id="unresolved-list" class="findings-list"></div>
+              </div>
+              <div id="case-recommendations-section" class="section-block hidden">
+                <div class="section-block-title">Recommendations</div>
+                <div id="case-recommendations-list" class="numbered-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Eval (placeholder - content injected by JS) -->
+        <div id="tab-eval" class="tab-content">
+          <div id="eval-content" class="eval-content"></div>
+        </div>
+
+        <!-- Tab: Outputs -->
         <div id="tab-outputs" class="tab-content">
           <div id="outputs-list" class="outputs-list">
             <div class="node-list-empty">No outputs yet</div>
@@ -462,78 +542,6 @@
       </div>
     </aside>
 
-  </div>
-
-  <!-- Onboarding Overlay -->
-  <div id="onboarding-overlay" class="onboarding-overlay hidden">
-    <div class="onboarding-modal">
-      <div class="onboarding-header">
-        <span class="onboarding-title">Welcome to Cognitus</span>
-        <span class="onboarding-step" id="onboarding-step-indicator">Step 1 of 3</span>
-      </div>
-      <div class="onboarding-body">
-        <!-- Step 1: Mode Selection -->
-        <div id="onboarding-step-mode" class="onboarding-step-content">
-          <p class="onboarding-desc">How do you want to use Cognitus?</p>
-          <div class="onboarding-options">
-            <div class="onboarding-card" data-mode="free">
-              <span class="onboarding-card-icon">&#x2601;</span>
-              <span class="onboarding-card-title">Free — Groq API</span>
-              <span class="onboarding-card-desc">Fastest setup, free tier</span>
-            </div>
-            <div class="onboarding-card" data-mode="local">
-              <span class="onboarding-card-icon">&#x1F4BB;</span>
-              <span class="onboarding-card-title">Local — Ollama</span>
-              <span class="onboarding-card-desc">Private, runs on your device</span>
-            </div>
-            <div class="onboarding-card" data-mode="paid">
-              <span class="onboarding-card-icon">&#x1F511;</span>
-              <span class="onboarding-card-title">Paid — Your API Key</span>
-              <span class="onboarding-card-desc">OpenAI or Anthropic</span>
-            </div>
-            <div class="onboarding-card" data-mode="browser">
-              <span class="onboarding-card-icon">&#x1F310;</span>
-              <span class="onboarding-card-title">Browser — WebLLM</span>
-              <span class="onboarding-card-desc">Max privacy, no installs</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step 2: Key Entry -->
-        <div id="onboarding-step-key" class="onboarding-step-content hidden">
-          <p class="onboarding-desc" id="onboarding-key-desc">Enter your API key</p>
-          <div class="onboarding-key-input-group">
-            <input id="onboarding-key-input" type="password" class="question-input" placeholder="Paste your API key..." />
-            <button id="onboarding-key-validate" class="btn-primary">Validate</button>
-          </div>
-          <p id="onboarding-key-hint" class="onboarding-hint">Your key stays on this device. Never sent to Cognitus servers.</p>
-        </div>
-
-        <!-- Step 3: Template Analysis -->
-        <div id="onboarding-step-template" class="onboarding-step-content hidden">
-          <p class="onboarding-desc">Try one of these template situations to get started</p>
-          <div class="onboarding-templates">
-            <div class="onboarding-template-card" data-template="career">
-              <span class="template-card-title">Career Decision</span>
-              <span class="template-card-desc">"I'm considering leaving my stable job to join a startup..."</span>
-            </div>
-            <div class="onboarding-template-card" data-template="product">
-              <span class="template-card-title">Product Launch</span>
-              <span class="template-card-desc">"We're launching a new product in a competitive market..."</span>
-            </div>
-            <div class="onboarding-template-card" data-template="relationship">
-              <span class="template-card-title">Team Conflict</span>
-              <span class="template-card-desc">"Two senior team members have conflicting visions for the project..."</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="onboarding-footer">
-        <button id="onboarding-back" class="btn-secondary hidden">Back</button>
-        <button id="onboarding-next" class="btn-primary">Next</button>
-        <button id="onboarding-skip" class="btn-ghost">Skip</button>
-      </div>
-    </div>
   </div>
 
   <!-- Settings Modal -->
@@ -670,7 +678,7 @@
       </div>
       <div class="modal-footer">
         <button id="settings-reset-btn" class="btn-small">Reset Defaults</button>
-        <button id="settings-save-btn" class="btn-primary btn-small">Save Settings</button>
+        <button id="settings-save-btn" class="btn-primary">Save Settings</button>
       </div>
     </div>
   </div>
@@ -692,7 +700,76 @@
     </div>
   </div>
 
+  <!-- Onboarding Overlay -->
+  <div id="onboarding-overlay" class="onboarding-overlay hidden">
+    <div class="onboarding-modal">
+      <div class="onboarding-header">
+        <span class="onboarding-title">Welcome to Cognitus</span>
+        <span class="onboarding-step" id="onboarding-step-indicator">Step 1 of 3</span>
+      </div>
+      <div class="onboarding-body">
+        <div id="onboarding-step-mode" class="onboarding-step-content">
+          <p class="onboarding-desc">How do you want to use Cognitus?</p>
+          <div class="onboarding-options">
+            <div class="onboarding-card" data-mode="free">
+              <span class="onboarding-card-icon">&#x2601;</span>
+              <span class="onboarding-card-title">Free — Groq API</span>
+              <span class="onboarding-card-desc">Fastest setup, free tier</span>
+            </div>
+            <div class="onboarding-card" data-mode="local">
+              <span class="onboarding-card-icon">&#x1F4BB;</span>
+              <span class="onboarding-card-title">Local — Ollama</span>
+              <span class="onboarding-card-desc">Private, runs on your device</span>
+            </div>
+            <div class="onboarding-card" data-mode="paid">
+              <span class="onboarding-card-icon">&#x1F511;</span>
+              <span class="onboarding-card-title">Paid — Your API Key</span>
+              <span class="onboarding-card-desc">OpenAI or Anthropic</span>
+            </div>
+            <div class="onboarding-card" data-mode="browser">
+              <span class="onboarding-card-icon">&#x1F310;</span>
+              <span class="onboarding-card-title">Browser — WebLLM</span>
+              <span class="onboarding-card-desc">Max privacy, no installs</span>
+            </div>
+          </div>
+        </div>
+        <div id="onboarding-step-key" class="onboarding-step-content hidden">
+          <p class="onboarding-desc" id="onboarding-key-desc">Enter your API key</p>
+          <form class="onboarding-key-input-group" onsubmit="return false">
+            <input id="onboarding-key-input" type="password" class="question-input" placeholder="Paste your API key..." />
+            <button id="onboarding-key-validate" class="btn-primary" type="button">Validate</button>
+          </form>
+          <p id="onboarding-key-hint" class="onboarding-hint">Your key stays on this device. Never sent to Cognitus servers.</p>
+        </div>
+        <div id="onboarding-step-template" class="onboarding-step-content hidden">
+          <p class="onboarding-desc">Try one of these template situations to get started</p>
+          <div class="onboarding-templates">
+            <div class="onboarding-template-card" data-template="career">
+              <span class="template-card-title">Career Decision</span>
+              <span class="template-card-desc">"I'm considering leaving my stable job to join a startup..."</span>
+            </div>
+            <div class="onboarding-template-card" data-template="product">
+              <span class="template-card-title">Product Launch</span>
+              <span class="template-card-desc">"We're launching a new product in a competitive market..."</span>
+            </div>
+            <div class="onboarding-template-card" data-template="relationship">
+              <span class="template-card-title">Team Conflict</span>
+              <span class="template-card-desc">"Two senior team members have conflicting visions for the project..."</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="onboarding-footer">
+        <button id="onboarding-back" class="btn-secondary hidden">Back</button>
+        <button id="onboarding-next" class="btn-primary">Next</button>
+        <button id="onboarding-skip" class="btn-ghost">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tooltip -->
   <div id="tooltip" class="tooltip hidden"></div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

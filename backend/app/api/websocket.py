@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -21,7 +22,7 @@ from app.schemas.node_output import (
     confidence_to_level,
 )
 from app.services.hf_service import HFService
-from app.services.llm_router import get_llm_router
+from app.services.llm_router import get_llm_router, reset_llm_router
 from app.services.ghost_mode import GhostModeManager
 from app.services.redaction import RedactionAssistant
 from app.services.chat_router import ChatRouter
@@ -935,6 +936,14 @@ async def websocket_endpoint(
         analysis_mode = data.get("analysis_mode", "standard")
         ghost_level = data.get("ghost_level", "off")
         enable_streaming = data.get("streaming_enabled", True)
+
+        # Use Groq API key from frontend (stored in localStorage) if provided
+        groq_api_key = data.get("groq_api_key") or os.environ.get("GROQ_API_KEY")
+        if groq_api_key:
+            logger.info("Received Groq API key (len=%d), resetting router with override", len(groq_api_key))
+            os.environ["GROQ_API_KEY"] = groq_api_key
+            # Reset the LLM router so the Groq provider picks up the new key
+            reset_llm_router(api_key=groq_api_key)
 
         if not situation:
             await sender.send({"type": "error", "message": "situation is required"})
