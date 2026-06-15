@@ -78,12 +78,16 @@ class CouncilGraph:
         domains: list[DomainName] = state["distributor"]["domains"]
         experts: dict[str, Any] = {}
         errors: list[str] = []
-        tasks = []
 
-        for domain in domains:
-            node = ExpertNode(domain, self.hf_service)
-            tasks.append(node.analyze(state["situation"]))
+        # Rate-limit parallel Groq calls to avoid 429 Too Many Requests
+        _groq_sem = asyncio.Semaphore(3)
 
+        async def _rate_limited_analyze(domain: str, situation: str) -> Any:
+            async with _groq_sem:
+                node = ExpertNode(domain, self.hf_service)
+                return await node.analyze(situation)
+
+        tasks = [_rate_limited_analyze(d, state["situation"]) for d in domains]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for domain, result in zip(domains, results):

@@ -1,7 +1,19 @@
 from pydantic import BaseModel, Field
 
 
+def to_snake(name: str) -> str:
+    """Convert camelCase to snake_case."""
+    import re
+    s1 = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    return re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+
 class CustomNodeSchema(BaseModel):
+    model_config = {
+        "alias_generator": to_snake,
+        "populate_by_name": True,
+    }
+
     id: str = Field(default="", pattern=r"^custom_\d+$")
     label: str = Field(..., min_length=1, max_length=100)
     instruction: str = Field(..., min_length=1, max_length=300)

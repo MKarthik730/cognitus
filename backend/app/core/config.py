@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # Token limits
     HF_DEFAULT_MAX_TOKENS: int = 512
-    HF_EXPERT_MAX_TOKENS: int = 512
+    HF_EXPERT_MAX_TOKENS: int = 1024
     HF_SYNTHESIS_MAX_TOKENS: int = 2048
     HF_NODE_SELECTOR_MAX_TOKENS: int = 1024
     HF_TIMEOUT: int = 60
@@ -50,8 +50,8 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Database
     # ------------------------------------------------------------------
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/cortex"
-    REDIS_URL: str = "redis://redis:6379"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:karthik988%2c%2c@localhost:5432/cortex"
+    REDIS_URL: str = "redis://localhost:6379"
 
     # ------------------------------------------------------------------
     # Auth

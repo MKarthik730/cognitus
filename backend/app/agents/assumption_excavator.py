@@ -89,14 +89,15 @@ class AssumptionExcavator:
         if assumptions:
             return assumptions
         # Fallback: basic heuristic assumptions
+        AssumptionCls = _get_assumption()
         return [
-            Assumption(
+            AssumptionCls(
                 assumption="The situation has been described honestly and accurately",
                 category="factual",
                 importance="critical",
                 why_hidden="Default assumption — user may omit key details",
             ),
-            Assumption(
+            AssumptionCls(
                 assumption="The description contains all relevant information",
                 category="logical",
                 importance="critical",
@@ -110,8 +111,9 @@ class AssumptionExcavator:
             cleaned = clean_json_response(raw)
             data = json.loads(cleaned)
             raw_assumptions = data.get("assumptions", [])
+            AssumptionCls = _get_assumption()
             return [
-                Assumption(
+                AssumptionCls(
                     assumption=a.get("assumption", ""),
                     category=a.get("category", "factual"),
                     importance=a.get("importance", "moderate"),

@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useGraphStore } from './stores/graphStore';
+import { useAuthStore } from './stores/authStore';
+import { useSettingsStore } from './stores/settingsStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Header } from './components/Header';
 import { AgentRoster } from './components/AgentRoster';
@@ -9,6 +11,8 @@ import { InputBar } from './components/InputBar';
 import { CustomNodeBuilder } from './components/CustomNodeBuilder';
 import { NodePopover } from './components/NodePopover';
 import { ModeSelector } from './components/ModeSelector';
+import { SettingsPanel } from './components/SettingsPanel';
+import { AuthModal } from './components/AuthModal';
 
 const App: React.FC = () => {
   const status = useGraphStore((s) => s.status);
@@ -16,14 +20,26 @@ const App: React.FC = () => {
   const setGraph = useGraphStore((s) => s.setGraph);
   const setSessionId = useGraphStore((s) => s.setSessionId);
   const mode = useGraphStore((s) => s.mode);
+  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const token = useAuthStore((s) => s.token);
+  const initAuth = useAuthStore((s) => s.initAuth);
 
   const ws = useWebSocket();
 
+  // Load auth + settings on mount
+  useEffect(() => {
+    initAuth();
+    loadSettings();
+  }, [initAuth, loadSettings]);
+
   const handleAnalyze = async (q: string) => {
+    // Reset previous session state
+    useGraphStore.getState().reset();
+    ws.disconnect();
     setStatus('planning');
 
     try {
-      const token = localStorage.getItem('token');
       const sid = `session_${Date.now()}`;
       setSessionId(sid);
 
@@ -41,13 +57,18 @@ const App: React.FC = () => {
         const plan = await res.json();
         setGraph(plan);
 
-        // Connect WebSocket for real-time streaming
+        // Connect WebSocket for real-time streaming with API key
         setStatus('analyzing');
         ws.connect(sid, {
-          query: q,
+          situation: q,
           graph: plan,
-          mode,
+          analysis_mode: mode,
+          groq_api_key: groqApiKey || undefined,
         });
+      } else if (res.status === 401) {
+        // Token expired or invalid — re-prompt auth
+        useAuthStore.getState().setAuthOpen(true);
+        setStatus('idle');
       } else {
         setStatus('error');
       }
@@ -62,7 +83,7 @@ const App: React.FC = () => {
       <Header />
 
       {status === 'idle' ? (
-        <ModeSelector />
+        <ModeSelector onAnalyze={handleAnalyze} />
       ) : (
         <div className="flex-1 flex overflow-hidden min-h-0">
           <AgentRoster />
@@ -79,10 +100,16 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <InputBar onAnalyze={handleAnalyze} />
+      {status !== 'idle' && <InputBar onAnalyze={handleAnalyze} />}
 
       {/* Slide-in custom node builder */}
       <CustomNodeBuilder />
+
+      {/* Settings panel */}
+      <SettingsPanel />
+
+      {/* Auth modal */}
+      <AuthModal />
 
       {/* Node popover (Obsidian-style) */}
       <NodePopover />

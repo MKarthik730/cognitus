@@ -1,63 +1,42 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGraphStore } from '../stores/graphStore';
 import type { AnalysisMode, ModeCard } from '../types';
 
 const MODES: ModeCard[] = [
-  {
-    id: 'pre_mortem',
-    icon: '🎯',
-    name: 'Pre-Mortem',
-    description: 'Stress-test decisions before committing',
-    example: '"Should I accept this job offer?"',
-  },
-  {
-    id: 'signal_vs_noise',
-    icon: '🔬',
-    name: 'Signal vs Noise',
-    description: 'Filter facts from noise for research',
-    example: '"Is AI really a threat to humanity?"',
-  },
-  {
-    id: 'debate',
-    icon: '⚔️',
-    name: 'Debate',
-    description: 'Multi-perspective debate with moderator',
-    example: '"Should social media be regulated?"',
-  },
-  {
-    id: 'reverse_engineer',
-    icon: '🏗️',
-    name: 'Reverse Engineer',
-    description: 'Trace outcomes back to root causes',
-    example: '"Why did the startup fail after Series A?"',
-  },
-  {
-    id: 'iceberg',
-    icon: '🧊',
-    name: 'Iceberg Report',
-    description: 'Deep-dive beneath surface assumptions',
-    example: '"What are the hidden risks in cloud migration?"',
-  },
-  {
-    id: 'cascade',
-    icon: '🌊',
-    name: 'Cascade Mapper',
-    description: 'Map second and third order effects',
-    example: '"What happens if we mandate 4-day workweeks?"',
-  },
+  { id: 'standard', icon: '⚖️', name: 'Standard', description: '', example: '' },
+  { id: 'pre_mortem', icon: '🎯', name: 'Pre-Mortem', description: '', example: '' },
+  { id: 'signal_vs_noise', icon: '🔬', name: 'Signal vs Noise', description: '', example: '' },
+  { id: 'debate', icon: '⚔️', name: 'Debate', description: '', example: '' },
+  { id: 'reverse_engineer', icon: '🏗️', name: 'Reverse Engineer', description: '', example: '' },
+  { id: 'iceberg', icon: '🧊', name: 'Iceberg Report', description: '', example: '' },
+  { id: 'cascade', icon: '🌊', name: 'Cascade Mapper', description: '', example: '' },
 ];
 
 interface ModeSelectorProps {
-  onSelect?: (mode: AnalysisMode) => void;
+  onAnalyze?: (query: string) => void;
 }
 
-export const ModeSelector: React.FC<ModeSelectorProps> = ({ onSelect }) => {
+export const ModeSelector: React.FC<ModeSelectorProps> = ({ onAnalyze }) => {
   const setMode = useGraphStore((s) => s.setMode);
   const mode = useGraphStore((s) => s.mode);
+  const [query, setQuery] = useState('');
 
-  const handleSelect = (selected: AnalysisMode) => {
+  const handleModeSelect = (selected: AnalysisMode) => {
     setMode(selected);
-    onSelect?.(selected);
+  };
+
+  const handleSubmit = () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setQuery('');
+    onAnalyze?.(trimmed);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
@@ -77,61 +56,59 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ onSelect }) => {
             What shall we deliberate?
           </h1>
         </div>
-        <p className="font-body text-sm text-ghost leading-relaxed">
-          Choose an analysis mode — each assembles a unique council of AI agents
-          with different perspectives and expertise.
-        </p>
       </div>
 
-      {/* Mode cards grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-3xl w-full">
-        {MODES.map((card) => {
-          const isActive = mode === card.id;
-          const borderClass = isActive
-            ? 'border-pulse bg-surface-raised shadow-[0_0_12px_rgba(99,102,241,0.12)]'
-            : 'border-border bg-chamber hover:border-pulse/40 hover:bg-surface-raised';
-
+      {/* Mode pills */}
+      <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mb-8">
+        {MODES.map((modeCard) => {
+          const isActive = mode === modeCard.id;
           return (
             <button
-              key={card.id}
-              onClick={() => handleSelect(card.id)}
-              className={`group flex flex-col items-start gap-2 p-4 rounded-lg border text-left transition-all duration-200 ${borderClass}`}
+              key={modeCard.id}
+              onClick={() => handleModeSelect(modeCard.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                isActive
+                  ? 'bg-pulse text-white border-pulse shadow-[0_0_8px_rgba(99,102,241,0.25)]'
+                  : 'text-ghost border-border hover:text-white hover:border-pulse/40'
+              }`}
             >
-              <span className="text-xl">{card.icon}</span>
-              <div>
-                <h3 className="font-display text-sm font-semibold text-white group-hover:text-pulse transition-colors">
-                  {card.name}
-                </h3>
-                <p className="font-body text-[11px] text-ghost leading-relaxed mt-0.5">
-                  {card.description}
-                </p>
-              </div>
-              <code className="text-[10px] text-muted font-mono italic mt-1">
-                {card.example}
-              </code>
-              {isActive && (
-                <span className="mt-1 text-[10px] font-semibold text-pulse uppercase tracking-wider">
-                  Selected
-                </span>
-              )}
+              <span className="text-sm">{modeCard.icon}</span>
+              {modeCard.name}
             </button>
           );
         })}
       </div>
 
-      {/* Fallback mode */}
-      <div className="mt-5 flex items-center gap-2">
-        <span className="text-xs text-ghost">Or use</span>
-        <button
-          onClick={() => handleSelect('standard')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
-            mode === 'standard'
-              ? 'bg-pulse text-white border-pulse'
-              : 'text-ghost border-border hover:border-pulse/40 hover:text-white'
-          }`}
-        >
-          Standard Analysis
-        </button>
+      {/* Input area */}
+      <div className="w-full max-w-lg">
+        <div className="flex items-center gap-2 p-1.5 rounded-lg border border-border bg-chamber focus-within:border-pulse focus-within:shadow-[0_0_0_1px_#6366F1] transition-all">
+          <svg className="w-4 h-4 text-ghost flex-shrink-0 ml-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Describe a situation or ask the council..."
+            className="flex-1 h-10 bg-transparent text-white font-body text-[14px] outline-none placeholder:text-muted"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!query.trim()}
+            className="h-10 px-4 flex items-center gap-1.5 bg-pulse rounded-md text-white text-xs font-medium hover:bg-[#5558E6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+            Enter
+          </button>
+        </div>
+        <p className="text-[10px] text-muted text-center mt-2">
+          Selected: <span className="text-pulse font-semibold">{mode.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+        </p>
       </div>
     </div>
   );

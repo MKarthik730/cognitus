@@ -49,11 +49,11 @@ function layoutNodes(nodes: GraphNode[], edges: { from: string; to: string }[]):
   const remaining = nodes.filter((n) => !visited.has(n.id)).map((n) => n.id);
   if (remaining.length > 0) layers.push(remaining);
 
-  const padding = 80;
-  const layerGap = 220;
-  const colGap = 180;
-  const totalW = 800;
-  const totalH = 500;
+  const padding = 60;
+  const layerGap = 180;
+  const colGap = 150;
+  const totalW = 700;
+  const totalH = 450;
 
   const result: RenderNode[] = [];
   layers.forEach((layer, li) => {
@@ -73,7 +73,7 @@ function layoutNodes(nodes: GraphNode[], edges: { from: string; to: string }[]):
   return result;
 }
 
-// Bezier curve path between two points
+// Bezier curve path between two nodes
 function edgePath(x1: number, y1: number, x2: number, y2: number): string {
   const cx = (x1 + x2) / 2;
   return `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
@@ -131,7 +131,7 @@ export const GraphCanvas: React.FC = () => {
       <svg
         ref={svgRef}
         className="w-full h-full"
-        viewBox="0 0 900 600"
+        viewBox="0 0 820 550"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -173,7 +173,7 @@ export const GraphCanvas: React.FC = () => {
         <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
           <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#0F1520" strokeWidth="0.5" />
         </pattern>
-        <rect width="900" height="600" fill="url(#grid)" />
+        <rect width="820" height="550" fill="url(#grid)" />
 
         {/* Edges */}
         {edges.map((edge) => {
@@ -202,7 +202,7 @@ export const GraphCanvas: React.FC = () => {
           return (
             <g key={`${edge.from}-${edge.to}`}>
               <path
-                d={edgePath(from.x + 80, from.y + 30, to.x + 80, to.y + 30)}
+                d={edgePath(from.x + 65, from.y + 24, to.x + 65, to.y + 24)}
                 fill="none"
                 stroke={strokeColor}
                 strokeWidth={strokeWidth}
@@ -212,7 +212,7 @@ export const GraphCanvas: React.FC = () => {
               {/* Flow particles when data is flowing */}
               {(isActive || hasData) && (
                 <path
-                  d={edgePath(from.x + 80, from.y + 30, to.x + 80, to.y + 30)}
+                  d={edgePath(from.x + 65, from.y + 24, to.x + 65, to.y + 24)}
                   fill="none"
                   stroke={strokeColor}
                   strokeWidth={1.5}
@@ -224,8 +224,8 @@ export const GraphCanvas: React.FC = () => {
               {/* Conflict icon */}
               {isConflict && (
                 <text
-                  x={(from.x + to.x) / 2 + 80}
-                  y={(from.y + to.y) / 2 + 30}
+                  x={(from.x + to.x) / 2 + 65}
+                  y={(from.y + to.y) / 2 + 24}
                   textAnchor="middle"
                   fontSize="14"
                   fill="#F59E0B"
@@ -245,8 +245,8 @@ export const GraphCanvas: React.FC = () => {
           const isCustom = node.id.startsWith('custom_');
           const output = nodeOutputs[node.id];
           const color = NODE_COLORS[node.color] ?? NODE_COLORS.indigo;
-          const cx = node.x + 80;
-          const cy = node.y + 30;
+          const cx = node.x + 65;
+          const cy = node.y + 24;
 
           const nodeFill = isDone ? color : '#131B2A';
           const nodeStroke = isActive
@@ -271,7 +271,7 @@ export const GraphCanvas: React.FC = () => {
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={38}
+                  r={30}
                   fill="none"
                   stroke="#22D3EE"
                   strokeWidth={1}
@@ -285,7 +285,7 @@ export const GraphCanvas: React.FC = () => {
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={38}
+                  r={30}
                   fill="none"
                   stroke={color}
                   strokeWidth={0.5}
@@ -298,10 +298,10 @@ export const GraphCanvas: React.FC = () => {
               <rect
                 x={node.x}
                 y={node.y}
-                width={160}
-                height={60}
-                rx={8}
-                ry={8}
+                width={130}
+                height={48}
+                rx={6}
+                ry={6}
                 fill={nodeFill}
                 stroke={nodeStroke}
                 strokeWidth={isActive ? 2 : 1.5}
@@ -314,7 +314,7 @@ export const GraphCanvas: React.FC = () => {
               <rect
                 x={node.x}
                 y={node.y}
-                width={160}
+                width={130}
                 height={3}
                 rx={0}
                 fill={color}
@@ -323,7 +323,7 @@ export const GraphCanvas: React.FC = () => {
 
               {/* Custom node indicator */}
               {isCustom && (
-                <text x={node.x + 8} y={node.y + 16} fontSize="10" fill="#94A3B8" fontFamily="JetBrains Mono">
+                <text x={node.x + 6} y={node.y + 14} fontSize="9" fill="#94A3B8" fontFamily="JetBrains Mono">
                   ✎
                 </text>
               )}
@@ -334,21 +334,21 @@ export const GraphCanvas: React.FC = () => {
                 y={cy - 2}
                 textAnchor="middle"
                 fill={isDone ? '#FFFFFF' : '#94A3B8'}
-                fontSize="12"
+                fontSize="11"
                 fontFamily="Space Grotesk, sans-serif"
                 fontWeight="600"
               >
-                {node.label.length > 18 ? node.label.slice(0, 17) + '…' : node.label}
+                {node.label.length > 16 ? node.label.slice(0, 15) + '…' : node.label}
               </text>
 
               {/* Status indicator */}
               {isActive && (
                 <text
                   x={cx}
-                  y={cy + 14}
+                  y={cy + 12}
                   textAnchor="middle"
                   fill="#22D3EE"
-                  fontSize="10"
+                  fontSize="9"
                   fontFamily="JetBrains Mono, monospace"
                   className="animate-pulse"
                 >
@@ -358,19 +358,19 @@ export const GraphCanvas: React.FC = () => {
               {isDone && output && (
                 <text
                   x={cx}
-                  y={cy + 14}
+                  y={cy + 12}
                   textAnchor="middle"
                   fill="#94A3B8"
-                  fontSize="9"
+                  fontSize="8"
                   fontFamily="JetBrains Mono, monospace"
                 >
-                  {output.confidence}% · {output.verdict.slice(0, 24)}{output.verdict.length > 24 ? '…' : ''}
+                  {output.confidence}% · {output.verdict.slice(0, 20)}{output.verdict.length > 20 ? '…' : ''}
                 </text>
               )}
 
               {/* Connection dots */}
-              <circle cx={node.x + 80} cy={node.y} r={3} fill="#1E2D45" />
-              <circle cx={node.x + 80} cy={node.y + 60} r={3} fill="#1E2D45" />
+              <circle cx={node.x + 65} cy={node.y} r={2.5} fill="#1E2D45" />
+              <circle cx={node.x + 65} cy={node.y + 48} r={2.5} fill="#1E2D45" />
             </g>
           );
         })}
