@@ -28,28 +28,6 @@ async def inject_custom_node(
     specified `connect_from` and `connect_to` nodes, updating
     the graph edges accordingly.
     """
-    # Validate session exists
-    try:
-        session_id = int(body.session_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid session_id",
-        )
-
-    result = await db.execute(
-        select(Session).where(
-            Session.id == session_id,
-            Session.user_id == current_user.id,
-        )
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
-
     # Validate instruction (prompt injection guard)
     node = body.node
     injection_error = check_injection(node.instruction)
@@ -60,7 +38,7 @@ async def inject_custom_node(
         )
 
     # Build the custom node entry
-    custom_node_id = node.id or f"custom_{session_id}_{int(time.time())}"
+    custom_node_id = node.id or f"custom_{int(time.time())}"
 
     custom_node = {
         "id": custom_node_id,
@@ -70,8 +48,21 @@ async def inject_custom_node(
         "role": node.role,
     }
 
-    # Try to load the existing graph from the session
-    graph = _load_session_graph(session)
+    # Try to load the existing graph — from DB session if available, or build fresh
+    graph = None
+    try:
+        session_id = int(body.session_id)
+        result = await db.execute(
+            select(Session).where(
+                Session.id == session_id,
+                Session.user_id == current_user.id,
+            )
+        )
+        session = result.scalar_one_or_none()
+        if session:
+            graph = _load_session_graph(session)
+    except (ValueError, Exception):
+        session = None
 
     if graph:
         # Inject into existing graph
@@ -89,20 +80,19 @@ async def inject_custom_node(
             "mode": "standard",
         }
 
-    # Update session with new graph (store as metadata or custom field)
-    # For now, we store the graph in the session metadata
-    try:
-        import json
-        if hasattr(session, 'metadata') and session.metadata:
-            meta = json.loads(session.metadata) if isinstance(session.metadata, str) else session.metadata
-        else:
-            meta = {}
-        meta["graph"] = graph
-        session.metadata = json.dumps(meta)
-        await db.commit()
-    except Exception:
-        # Non-critical — graph is still returned
-        pass
+    # Persist to session if available
+    if session:
+        try:
+            import json
+            if hasattr(session, 'metadata') and session.metadata:
+                meta = json.loads(session.metadata) if isinstance(session.metadata, str) else session.metadata
+            else:
+                meta = {}
+            meta["graph"] = graph
+            session.metadata = json.dumps(meta)
+            await db.commit()
+        except Exception:
+            pass
 
     return InjectNodeResponse(graph=graph)
 

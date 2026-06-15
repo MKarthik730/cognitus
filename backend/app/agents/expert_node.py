@@ -98,7 +98,8 @@ DOMAIN_PROMPTS: dict[str, str] = {
 }
 
 JSON_SCHEMA_SUFFIX = """
-Respond ONLY in the following JSON schema. No preamble, no markdown fences, no explanation outside the JSON:
+You must respond with ONLY valid complete JSON — no explanation, no markdown, no truncation.
+Respond in the following JSON schema:
 {
     "confidence": <integer 0-100>,
     "position": "<string>",

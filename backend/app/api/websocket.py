@@ -101,10 +101,13 @@ async def _store_event(
     redis: Redis, session_id: str, event: dict[str, Any]
 ) -> None:
     """Store a WebSocket event in Redis for later replay on reconnect."""
-    key = WS_EVENTS_KEY.format(session_id=session_id)
-    await redis.lpush(key, json.dumps(event))
-    await redis.ltrim(key, 0, WS_EVENTS_MAX - 1)
-    await redis.expire(key, WS_EVENTS_TTL)
+    try:
+        key = WS_EVENTS_KEY.format(session_id=session_id)
+        await redis.lpush(key, json.dumps(event))
+        await redis.ltrim(key, 0, WS_EVENTS_MAX - 1)
+        await redis.expire(key, WS_EVENTS_TTL)
+    except Exception:
+        pass  # Redis is non-critical — skip on failure
 
 
 async def _fetch_events_after(
@@ -130,8 +133,11 @@ async def _store_partial_result(
     redis: Redis, session_id: str, node_name: str, data: dict[str, Any]
 ) -> None:
     """Store a partial node result so it can be recovered on resume."""
-    key = WS_PARTIAL_KEY.format(session_id=session_id, node_name=node_name)
-    await redis.setex(key, WS_EVENTS_TTL, json.dumps(data))
+    try:
+        key = WS_PARTIAL_KEY.format(session_id=session_id, node_name=node_name)
+        await redis.setex(key, WS_EVENTS_TTL, json.dumps(data))
+    except Exception:
+        pass  # Redis is non-critical — skip on failure
 
 
 async def _get_partial_results(
@@ -803,8 +809,10 @@ async def websocket_endpoint(
     redis: Redis | None = None
     try:
         redis = await get_redis()
+        await redis.ping()  # Fail-fast: validate connection immediately
     except Exception as e:
         logger.warning("Redis unavailable, reconnection recovery disabled: %s", e)
+        redis = None
 
     sender = EventSender(websocket, redis, session_id)
 
@@ -956,7 +964,6 @@ async def websocket_endpoint(
         if ghost_level in ("void", "phantom"):
             llm_override = ghost_mgr.get_llm_override(ghost_level)
             if llm_override:
-                from app.services.llm_router import reset_llm_router
                 reset_llm_router(mode=llm_override)
 
         # Ghost Mode disclosure
