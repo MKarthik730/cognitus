@@ -294,14 +294,14 @@ export const GraphCanvas: React.FC = () => {
                 />
               )}
 
-              {/* Node body */}
+              {/* Node body — pill shape */}
               <rect
                 x={node.x}
                 y={node.y}
                 width={130}
                 height={48}
-                rx={6}
-                ry={6}
+                rx={24}
+                ry={24}
                 fill={nodeFill}
                 stroke={nodeStroke}
                 strokeWidth={isActive ? 2 : 1.5}
@@ -310,13 +310,13 @@ export const GraphCanvas: React.FC = () => {
                 className={`transition-all duration-500 ${!isActive && !isDone ? 'hover:stroke-pulse/50' : ''}`}
               />
 
-              {/* Color strip on top */}
+              {/* Color strip on top — matching pill curve */}
               <rect
-                x={node.x}
+                x={node.x + 4}
                 y={node.y}
-                width={130}
+                width={122}
                 height={3}
-                rx={0}
+                rx={1.5}
                 fill={color}
                 opacity={isDone ? 1 : 0.4}
               />

@@ -18,7 +18,7 @@ INJECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"(new\s+)?system\s+(prompt|instruction|message)", re.IGNORECASE),
     
     # Role hijacking
-    re.compile(r"you\s+are\s+(now|not)\s+(a|an|the)?\s*((system|assistant|AI|GPT)", re.IGNORECASE),
+    re.compile(r"you\s+are\s+(now|not)\s+(a|an|the)?\s*(system|assistant|AI|GPT)", re.IGNORECASE),
     re.compile(r"act\s+as\s+(if\s+)?(you\s+are\s+)?(the\s+)?(system|admin|developer)", re.IGNORECASE),
     
     # Delimiter breaking

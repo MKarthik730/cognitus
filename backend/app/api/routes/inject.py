@@ -50,27 +50,33 @@ async def inject_custom_node(
 
     # Try to load the existing graph — from DB session if available, or build fresh
     graph = None
+    session = None
     try:
-        session_id = int(body.session_id)
-        result = await db.execute(
-            select(Session).where(
-                Session.id == session_id,
-                Session.user_id == current_user.id,
+        # Support both numeric DB session IDs and frontend-generated string IDs
+        session_id_str = body.session_id
+        if session_id_str.isdigit():
+            session_id = int(session_id_str)
+            result = await db.execute(
+                select(Session).where(
+                    Session.id == session_id,
+                    Session.user_id == current_user.id,
+                )
             )
-        )
-        session = result.scalar_one_or_none()
-        if session:
-            graph = _load_session_graph(session)
-    except (ValueError, Exception):
-        session = None
+            session = result.scalar_one_or_none()
+            if session:
+                graph = _load_session_graph(session)
+    except Exception:
+        pass
 
     if graph:
         # Inject into existing graph
+        connect_from = node.connect_from or (graph.get("nodes", [])[0]["id"] if graph.get("nodes") else "")
+        connect_to = node.connect_to or (graph.get("nodes", [])[-1]["id"] if graph.get("nodes") else "")
         graph = _inject_into_graph(
             graph=graph,
             custom_node=custom_node,
-            connect_from=node.connect_from,
-            connect_to=node.connect_to,
+            connect_from=connect_from,
+            connect_to=connect_to,
         )
     else:
         # Create a minimal graph with just this node

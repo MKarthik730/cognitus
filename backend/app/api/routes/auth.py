@@ -48,7 +48,7 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    token = create_access_token(data={"sub": user.id})
+    token = create_access_token(data={"sub": str(user.id)})
     return TokenResponse(access_token=token)
 
 
@@ -70,5 +70,5 @@ async def login(
             detail="Account deactivated",
         )
 
-    token = create_access_token(data={"sub": user.id})
+    token = create_access_token(data={"sub": str(user.id)})
     return TokenResponse(access_token=token)

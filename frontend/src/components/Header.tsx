@@ -1,12 +1,15 @@
 import React from 'react';
 import { useGraphStore } from '../stores/graphStore';
 import { useCustomNodeStore } from '../stores/customNodeStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export const Header: React.FC = () => {
   const status = useGraphStore((s) => s.status);
   const activeNodeId = useGraphStore((s) => s.activeNodeId);
   const graph = useGraphStore((s) => s.graph);
   const setPanelOpen = useCustomNodeStore((s) => s.setPanelOpen);
+  const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
+  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
 
   const nodeCount = graph?.nodes.length ?? 0;
   const statusColor =
@@ -20,6 +23,8 @@ export const Header: React.FC = () => {
     status === 'planning' ? 'Planning' :
     status === 'analyzing' ? 'Analyzing' :
     status === 'complete' ? 'Complete' : 'Error';
+
+  const hasKey = !!groqApiKey;
 
   return (
     <header className="h-12 flex items-center px-4 bg-chamber border-b border-border flex-shrink-0 gap-4">
@@ -68,6 +73,24 @@ export const Header: React.FC = () => {
             {activeNodeId} thinking...
           </span>
         )}
+
+        {/* Settings button */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium border rounded-sm transition-colors ${
+            hasKey
+              ? 'text-green-400 border-green-400/40 hover:border-green-400 hover:text-green-300'
+              : 'text-ghost border-border hover:border-pulse hover:text-white'
+          }`}
+          title="Settings & API Keys"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          {hasKey ? 'API Key Set' : 'Settings'}
+        </button>
+
         <button
           onClick={() => setPanelOpen(true)}
           className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-ghost border border-border rounded-sm hover:border-pulse hover:text-white transition-colors"
