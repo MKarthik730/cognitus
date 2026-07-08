@@ -44,7 +44,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   ...initialState,
 
   setSessionId: (id) => set({ sessionId: id }),
+
   setQuery: (query) => set({ query }),
+
   setMode: (mode) => set({ mode }),
 
   setGraph: (graph) => set({ graph, status: 'planning' }),
@@ -60,7 +62,9 @@ export const useGraphStore = create<GraphState>((set) => ({
     })),
 
   setActiveNode: (nodeId) => set({ activeNodeId: nodeId }),
+
   setStatus: (status) => set({ status }),
+
   setFinalVerdict: (verdict) => set({ finalVerdict: verdict, status: 'complete' }),
 
   addEdgeConflict: (conflict) =>

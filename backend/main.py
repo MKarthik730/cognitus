@@ -31,6 +31,10 @@ queue_worker: QueueWorker | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global redis, queue_worker
+
+    # Initialize database (extensions + tables)
+    await init_db()
+
     try:
         redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
         await redis.ping()
@@ -92,11 +96,6 @@ app.include_router(plan_router)
 app.include_router(presets_router)
 app.include_router(inject_router)
 
-
-@app.on_event("startup")
-async def on_startup():
-    """Initialize database extensions (pgvector) on startup."""
-    await init_db()
 
 
 @app.get("/api/nodes")
