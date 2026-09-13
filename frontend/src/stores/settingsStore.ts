@@ -4,6 +4,13 @@ interface SettingsState {
   isSettingsOpen: boolean;
   llmMode: string;
 
+  // LLM endpoint — one URL field covers local llama.cpp, a tunneled/cloud
+  // host (e.g. ngrok/cloudflared fronting a Kaggle-hosted model), or any
+  // other OpenAI-compatible server. Blank = use the backend's local default.
+  llmBaseUrl: string;
+  llmApiKey: string;
+  llmModelName: string;
+
   // Live research (real-time data)
   researchEnabled: boolean;
   researchCategories: string[];
@@ -11,6 +18,9 @@ interface SettingsState {
 
   setSettingsOpen: (open: boolean) => void;
   setLlmMode: (mode: string) => void;
+  setLlmBaseUrl: (url: string) => void;
+  setLlmApiKey: (key: string) => void;
+  setLlmModelName: (name: string) => void;
   setResearchEnabled: (enabled: boolean) => void;
   toggleResearchCategory: (category: string) => void;
   addCustomUrl: (url: string) => void;
@@ -30,6 +40,9 @@ function persist(partial: Record<string, unknown>) {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   isSettingsOpen: false,
   llmMode: 'local',
+  llmBaseUrl: '',
+  llmApiKey: '',
+  llmModelName: '',
   researchEnabled: false,
   researchCategories: [],
   customUrls: [],
@@ -39,6 +52,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setLlmMode: (mode) => {
     set({ llmMode: mode });
     persist({ llmMode: mode });
+  },
+
+  setLlmBaseUrl: (url) => {
+    set({ llmBaseUrl: url });
+    persist({ llmBaseUrl: url });
+  },
+
+  setLlmApiKey: (key) => {
+    set({ llmApiKey: key });
+    persist({ llmApiKey: key });
+  },
+
+  setLlmModelName: (name) => {
+    set({ llmModelName: name });
+    persist({ llmModelName: name });
   },
 
   setResearchEnabled: (enabled) => {
@@ -78,6 +106,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         const saved = JSON.parse(raw);
         set({
           llmMode: 'local',
+          llmBaseUrl: saved.llmBaseUrl ?? '',
+          llmApiKey: saved.llmApiKey ?? '',
+          llmModelName: saved.llmModelName ?? '',
           researchEnabled: saved.researchEnabled ?? false,
           researchCategories: saved.researchCategories ?? [],
           customUrls: saved.customUrls ?? [],

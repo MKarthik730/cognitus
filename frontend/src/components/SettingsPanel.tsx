@@ -1,10 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 
-const LLM_MODES = [
-  { value: 'local', label: 'Local llama.cpp', desc: 'Qwen 2.5 1.5B GGUF at localhost:8000' },
-];
-
 // Fallback shown if /api/sources can't be reached — kept in sync with
 // backend/app/services/live_sources.py CURATED_SOURCES.
 const FALLBACK_CATEGORIES: Record<string, { name: string }[]> = {
@@ -28,8 +24,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 export const SettingsPanel: React.FC = () => {
   const isOpen = useSettingsStore((s) => s.isSettingsOpen);
   const setOpen = useSettingsStore((s) => s.setSettingsOpen);
-  const llmMode = useSettingsStore((s) => s.llmMode);
-  const setLlmMode = useSettingsStore((s) => s.setLlmMode);
+
+  const llmBaseUrl = useSettingsStore((s) => s.llmBaseUrl);
+  const setLlmBaseUrl = useSettingsStore((s) => s.setLlmBaseUrl);
+  const llmApiKey = useSettingsStore((s) => s.llmApiKey);
+  const setLlmApiKey = useSettingsStore((s) => s.setLlmApiKey);
+  const llmModelName = useSettingsStore((s) => s.llmModelName);
+  const setLlmModelName = useSettingsStore((s) => s.setLlmModelName);
 
   const researchEnabled = useSettingsStore((s) => s.researchEnabled);
   const setResearchEnabled = useSettingsStore((s) => s.setResearchEnabled);
@@ -110,42 +111,50 @@ export const SettingsPanel: React.FC = () => {
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-            {/* LLM Mode */}
+            {/* LLM Endpoint */}
             <div>
               <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
-                LLM Provider
+                LLM Endpoint
               </label>
               <p className="text-[10px] text-muted mt-0.5 mb-2">
-                Choose which AI backend powers the council.
+                Local by default. Paste any OpenAI-compatible URL instead — a
+                tunneled Kaggle/Colab endpoint (ngrok, cloudflared), or a
+                hosted provider — plus a key if it requires one.
               </p>
-              <div className="space-y-1.5">
-                {LLM_MODES.map((m) => (
-                  <button
-                    key={m.value}
-                    onClick={() => setLlmMode(m.value)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md border text-left transition-all ${
-                      llmMode === m.value
-                        ? 'border-pulse bg-surface-raised shadow-[0_0_8px_rgba(99,102,241,0.1)]'
-                        : 'border-border bg-void hover:border-pulse/40'
-                    }`}
-                  >
-                    <span
-                      className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                        llmMode === m.value ? 'border-pulse' : 'border-muted'
-                      }`}
-                    >
-                      {llmMode === m.value && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-pulse" />
-                      )}
-                    </span>
-                    <div>
-                      <span className="text-[12px] font-medium text-white">
-                        {m.label}
-                      </span>
-                      <p className="text-[10px] text-muted">{m.desc}</p>
-                    </div>
-                  </button>
-                ))}
+
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">Base URL</label>
+                  <input
+                    type="text"
+                    value={llmBaseUrl}
+                    onChange={(e) => setLlmBaseUrl(e.target.value)}
+                    placeholder="http://localhost:8000/v1"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">API Key (optional)</label>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder="only needed for cloud/tunneled endpoints"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">Model name (optional)</label>
+                  <input
+                    type="text"
+                    value={llmModelName}
+                    onChange={(e) => setLlmModelName(e.target.value)}
+                    placeholder="qwen2.5-1.5b-instruct-q4_k_m.gguf"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
               </div>
             </div>
 
@@ -270,8 +279,9 @@ export const SettingsPanel: React.FC = () => {
                     analysis request.
                   </p>
                   <p className="text-[10px] text-ghost leading-relaxed mt-1">
-                    The council connects to your local llama.cpp server at
-                    <code className="text-white"> http://localhost:8000</code>.
+                    Leave the LLM endpoint blank to use the local llama.cpp
+                    server at <code className="text-white">http://localhost:8000</code>,
+                    or set a URL above to use a tunneled or cloud-hosted model instead.
                   </p>
                 </div>
               </div>

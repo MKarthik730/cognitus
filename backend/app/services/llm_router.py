@@ -281,11 +281,24 @@ class GroqProvider(LLMProvider):
 # ---------------------------------------------------------------------------
 
 class LlamaCppProvider(LLMProvider):
-    """Local inference through llama.cpp's OpenAI-compatible endpoint."""
+    """Inference through any OpenAI-compatible /v1/chat/completions endpoint.
 
-    def __init__(self) -> None:
-        self.base_url = settings.LLAMA_CPP_BASE_URL.rstrip("/")
-        self.model = settings.LLAMA_CPP_MODEL
+    Despite the name, this isn't limited to a local llama.cpp server — the
+    base_url/model/api_key are all overridable per-request, so this same
+    provider talks to a local server, a tunneled endpoint (ngrok/cloudflared
+    fronting a Kaggle-hosted model), or any other OpenAI-compatible host.
+    Falls back to the configured local defaults when no override is given.
+    """
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        self.base_url = (base_url or settings.LLAMA_CPP_BASE_URL).rstrip("/")
+        self.model = model or settings.LLAMA_CPP_MODEL
+        self._api_key = api_key or "not-needed"
         self._client: Any = None
         self._init_client()
 
@@ -295,18 +308,18 @@ class LlamaCppProvider(LLMProvider):
             self._client = ChatOpenAI(
                 model=self.model,
                 base_url=self.base_url,
-                api_key="local",
+                api_key=self._api_key,
                 temperature=0.3,
             )
         except Exception as e:
-            logger.error("Failed to init Ollama client: %s", e)
+            logger.error("Failed to init LLM client for %s: %s", self.base_url, e)
             self._client = None
 
     async def generate(
         self, system: str, user: str, max_tokens: int | None = None
     ) -> tuple[str, str]:
         if not self._client:
-            raise RuntimeError("Ollama client not initialized")
+            raise RuntimeError(f"LLM client not initialized for endpoint {self.base_url}")
 
         max_tokens = max_tokens or 512
         messages = [
@@ -443,19 +456,31 @@ class LLMRouter:
         text = await router.generate_with_image("system", "user", image_uri)
         text = await router.summarize_text(long_text)
 
-    Accepts an optional api_key to override env/settings-based key
-    (used when frontend passes Groq key via WebSocket).
+    Accepts optional overrides for the endpoint (base_url), model name, and
+    api_key — so the same router can point at a local llama.cpp server, a
+    tunneled endpoint (e.g. ngrok/cloudflared fronting a Kaggle-hosted model),
+    or any other OpenAI-compatible host, without redeploying.
     """
 
-    def __init__(self, mode: str | None = None, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        mode: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
         self.mode = LLMMode.LOCAL
         self._provider: LLMProvider | None = None
         self._hardware: HardwareInfo | None = None
         self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
         self._init_provider()
 
     def _init_provider(self) -> None:
-        self._provider = LlamaCppProvider()
+        self._provider = LlamaCppProvider(
+            base_url=self._base_url, model=self._model, api_key=self._api_key,
+        )
 
     def _detect_hardware(self) -> HardwareInfo:
         if self._hardware is None:
@@ -620,17 +645,29 @@ def get_llm_router() -> LLMRouter:
     return _router_instance
 
 
-def reset_llm_router(mode: str | None = None, api_key: str | None = None) -> LLMRouter:
-    """Reset the router (e.g. when Ghost Mode overrides LLM mode).
+def reset_llm_router(
+    mode: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+) -> LLMRouter:
+    """Reset the router (e.g. when Ghost Mode or a custom endpoint is set).
 
     Args:
         mode: Optional LLM mode override.
-        api_key: Optional API key override (used for Groq when key
-                 comes from frontend via WebSocket).
+        api_key: Optional API key override (e.g. for a cloud/tunneled endpoint
+                 that requires auth, sent from the frontend per-request).
+        base_url: Optional endpoint override — a local llama.cpp URL, a
+                  tunneled endpoint (ngrok/cloudflared), or any other
+                  OpenAI-compatible host.
+        model: Optional model name override, matching what the target
+               endpoint actually serves.
     """
     global _router_instance
     _router_instance = LLMRouter(
         mode=mode or settings.LLM_MODE,
         api_key=api_key,
+        base_url=base_url,
+        model=model,
     )
     return _router_instance

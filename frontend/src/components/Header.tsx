@@ -2,13 +2,20 @@ import React from 'react';
 import { useGraphStore } from '../stores/graphStore';
 import { useCustomNodeStore } from '../stores/customNodeStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useAuthStore } from '../stores/authStore';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onNewSession?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onNewSession }) => {
   const status = useGraphStore((s) => s.status);
   const activeNodeId = useGraphStore((s) => s.activeNodeId);
   const graph = useGraphStore((s) => s.graph);
   const setPanelOpen = useCustomNodeStore((s) => s.setPanelOpen);
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
+  const logout = useAuthStore((s) => s.logout);
+  const setAuthOpen = useAuthStore((s) => s.setAuthOpen);
 
   const nodeCount = graph?.nodes.length ?? 0;
   const statusColor =
@@ -35,6 +42,20 @@ export const Header: React.FC = () => {
           council
         </span>
       </div>
+
+      {status !== 'idle' && (
+        <button
+          onClick={onNewSession}
+          title="Back to start — new session"
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-ghost hover:text-white transition-colors flex-shrink-0"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          New Session
+        </button>
+      )}
 
       <div className="w-px h-5 bg-border flex-shrink-0" />
 
@@ -93,6 +114,19 @@ export const Header: React.FC = () => {
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
           Add Agent
+        </button>
+
+        <button
+          onClick={() => { logout(); setAuthOpen(true); onNewSession?.(); }}
+          title="Log out"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-ghost border border-border rounded-sm hover:border-red-400 hover:text-red-300 transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Log Out
         </button>
       </div>
     </header>

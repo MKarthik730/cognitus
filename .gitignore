@@ -32,6 +32,9 @@ Thumbs.db
 # Ruff
 .ruff_cache/
 
+# Logs
+*.log
+
 # Windows
 nul
 ren .txt

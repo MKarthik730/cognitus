@@ -96,6 +96,18 @@ WS_PARTIAL_KEY = "partial:{session_id}:{node_name}"
 WS_EVENTS_TTL = 600  # 10 minutes
 WS_EVENTS_MAX = 100  # keep last 100 events
 
+# "Special" analysis modes run a single dedicated analyzer (no expert roster,
+# no cross-examination) and return a bespoke JSON shape via `node_complete`/
+# `complete`'s `mode_output` field instead of the standard expert pipeline.
+SPECIAL_ANALYSIS_MODES = {
+    "signal_vs_noise", "cascade_mapper", "pre_mortem",
+    "debate", "reverse_engineer", "iceberg",
+}
+STANDARD_ANALYSIS_MODES = {"standard", "deep_research", "engineering"}
+# Only these 4 are exposed in the UI's mode selector today — the other
+# special modes above are dispatchable but not yet wired into the frontend.
+VALID_ANALYSIS_MODES = STANDARD_ANALYSIS_MODES | {"debate"}
+
 
 async def _store_event(
     redis: Redis, session_id: str, event: dict[str, Any]
@@ -585,6 +597,54 @@ Respond ONLY with JSON:
     )
 
 
+async def _inject_live_research(
+    sender: EventSender,
+    situation: str,
+    research_enabled: bool,
+    research_categories: list[str] | None,
+    custom_urls: list[str] | None,
+) -> str:
+    """Fetch curated/custom live sources and append them to the situation text.
+
+    Shared by the standard pipeline and the special-analysis-mode dispatch —
+    both want the same real-time context injected before the LLM runs.
+    Returns the (possibly augmented) situation string.
+    """
+    if not (research_enabled and (research_categories or custom_urls)):
+        return situation
+    try:
+        from app.services.live_sources import gather_curated_sources, gather_custom_urls
+
+        await sender.send({"type": "research_start"})
+        curated, custom = await asyncio.gather(
+            gather_curated_sources(research_categories or [], situation),
+            gather_custom_urls(custom_urls or []),
+        )
+        live_sources = [*custom, *curated][:20]
+        if live_sources:
+            source_context = "\n".join(
+                f"- [{item.get('source', 'source')}] {item.get('title', '')}: "
+                f"{item.get('content', '')} ({item.get('source_url', '')})"
+                for item in live_sources
+            )
+            situation = (
+                f"{situation}\n\n=== LIVE SOURCES (verify before relying on them) ===\n{source_context}"
+            )
+        await sender.send(
+            {
+                "type": "research_sources",
+                "sources": [
+                    {"source": i.get("source", ""), "title": i.get("title", ""), "url": i.get("source_url", "")}
+                    for i in live_sources
+                ],
+            }
+        )
+    except Exception as e:
+        logger.warning("Live research injection failed: %s", e)
+        await sender.send({"type": "research_sources", "sources": []})
+    return situation
+
+
 async def _stream_graph_events(
     sender: EventSender,
     situation: str,
@@ -606,37 +666,9 @@ async def _stream_graph_events(
         )
 
     # Live/real-time research injection (curated free sources + user URLs)
-    if research_enabled and (research_categories or custom_urls):
-        try:
-            from app.services.live_sources import gather_curated_sources, gather_custom_urls
-
-            await sender.send({"type": "research_start"})
-            curated, custom = await asyncio.gather(
-                gather_curated_sources(research_categories or [], situation),
-                gather_custom_urls(custom_urls or []),
-            )
-            live_sources = [*custom, *curated][:20]
-            if live_sources:
-                source_context = "\n".join(
-                    f"- [{item.get('source', 'source')}] {item.get('title', '')}: "
-                    f"{item.get('content', '')} ({item.get('source_url', '')})"
-                    for item in live_sources
-                )
-                situation = (
-                    f"{situation}\n\n=== LIVE SOURCES (verify before relying on them) ===\n{source_context}"
-                )
-            await sender.send(
-                {
-                    "type": "research_sources",
-                    "sources": [
-                        {"source": i.get("source", ""), "title": i.get("title", ""), "url": i.get("source_url", "")}
-                        for i in live_sources
-                    ],
-                }
-            )
-        except Exception as e:
-            logger.warning("Live research injection failed: %s", e)
-            await sender.send({"type": "research_sources", "sources": []})
+    situation = await _inject_live_research(
+        sender, situation, research_enabled, research_categories, custom_urls
+    )
 
     # Redact PII if ghost mode is active
     if ghost_level != "off":
@@ -978,13 +1010,16 @@ async def websocket_endpoint(
         situation = data.get("situation", "")
         user_id = data.get("user_id", 0)
         analysis_mode = data.get("analysis_mode", "standard")
-        if analysis_mode not in {"standard", "deep_research", "debate", "engineering"}:
+        if analysis_mode not in VALID_ANALYSIS_MODES:
             analysis_mode = "standard"
         ghost_level = data.get("ghost_level", "off")
         enable_streaming = data.get("streaming_enabled", True)
         research_enabled = bool(data.get("research_enabled", False))
         research_categories = data.get("research_categories") or []
         custom_urls = data.get("custom_urls") or []
+        llm_base_url = (data.get("llm_base_url") or "").strip() or None
+        llm_api_key = (data.get("llm_api_key") or "").strip() or None
+        llm_model = (data.get("llm_model") or "").strip() or None
 
         if not situation:
             await sender.send({"type": "error", "message": "situation is required"})
@@ -994,10 +1029,18 @@ async def websocket_endpoint(
 
         # Ghost Mode override: Void → force Local, Phantom → force Browser
         ghost_mgr = GhostModeManager()
+        llm_override = None
         if ghost_level in ("void", "phantom"):
             llm_override = ghost_mgr.get_llm_override(ghost_level)
-            if llm_override:
-                reset_llm_router(mode=llm_override)
+
+        # Custom LLM endpoint (local / tunneled / cloud) — single URL field
+        # plus an optional API key, so the same UI covers a local llama.cpp
+        # server, a Kaggle-hosted model behind an ngrok/cloudflared tunnel,
+        # or any other OpenAI-compatible host.
+        if llm_override or llm_base_url or llm_api_key or llm_model:
+            reset_llm_router(
+                mode=llm_override, base_url=llm_base_url, api_key=llm_api_key, model=llm_model,
+            )
 
         # Ghost Mode disclosure
         disclosure = ghost_mgr.get_disclosure(ghost_level)
@@ -1009,8 +1052,11 @@ async def websocket_endpoint(
         council_graph = CouncilGraph(hf_service)
 
         # Handle new analysis modes
-        if analysis_mode in ("signal_vs_noise", "cascade_mapper", "pre_mortem", "debate", "reverse_engineer", "iceberg"):
+        if analysis_mode in SPECIAL_ANALYSIS_MODES:
             try:
+                situation = await _inject_live_research(
+                    sender, situation, research_enabled, research_categories, custom_urls
+                )
                 await sender.send({"type": "node_start", "node": analysis_mode, "status": "processing"})
 
                 mode_map = {
