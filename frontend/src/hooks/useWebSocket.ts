@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useGraphStore } from '../stores/graphStore';
+import { mapSpecialModeOutputs, deriveSpecialVerdict } from '../utils/specialModes';
+import type { AnalysisMode } from '../types';
 
 const WS_BASE = `ws://${window.location.hostname}:5173/ws`;
 
@@ -125,6 +127,21 @@ export function useWebSocket() {
 
           // Final complete event
           case 'complete':
+            // Special modes (currently just Debate) return a bespoke shape
+            // via `mode_output` instead of `experts`/`verdict` — map it onto
+            // the same node/verdict shapes the standard pipeline renders.
+            if (event.data.analysis_mode && event.data.mode_output) {
+              const specialMode = event.data.analysis_mode as AnalysisMode;
+              const mapped = mapSpecialModeOutputs(specialMode, event.data.mode_output);
+              Object.entries(mapped).forEach(([key, output]) => {
+                store.updateNodeOutput(key, output);
+              });
+              store.setActiveNode(null);
+              store.setFinalVerdict(deriveSpecialVerdict(specialMode, event.data.mode_output));
+              store.setStatus('complete');
+              break;
+            }
+
             // Store all expert outputs from the complete payload (for reconnect recovery)
             if (event.data.experts) {
               event.data.experts.forEach((exp: { domain: string; analysis: string; confidence: string; position: string; reasoning: string; key_findings: string[]; concerns: string[]; cached: boolean }) => {
@@ -153,6 +170,15 @@ export function useWebSocket() {
           // Error
           case 'error':
             store.setStatus('error');
+            break;
+
+          // Live research (real-time data) — fetching, then the sources used
+          case 'research_start':
+            store.setResearching(true);
+            break;
+
+          case 'research_sources':
+            store.setLiveSources(event.sources || []);
             break;
 
           // Ghost mode / PII / assumptions — log but don't disrupt

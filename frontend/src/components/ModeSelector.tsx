@@ -4,12 +4,9 @@ import type { AnalysisMode, ModeCard } from '../types';
 
 const MODES: ModeCard[] = [
   { id: 'standard', icon: '⚖️', name: 'Standard', description: '', example: '' },
-  { id: 'pre_mortem', icon: '🎯', name: 'Pre-Mortem', description: '', example: '' },
-  { id: 'signal_vs_noise', icon: '🔬', name: 'Signal vs Noise', description: '', example: '' },
+  { id: 'deep_research', icon: '🔎', name: 'Deep Research', description: '', example: '' },
   { id: 'debate', icon: '⚔️', name: 'Debate', description: '', example: '' },
-  { id: 'reverse_engineer', icon: '🏗️', name: 'Reverse Engineer', description: '', example: '' },
-  { id: 'iceberg', icon: '🧊', name: 'Iceberg Report', description: '', example: '' },
-  { id: 'cascade', icon: '🌊', name: 'Cascade Mapper', description: '', example: '' },
+  { id: 'engineering', icon: '⚙️', name: 'Engineering', description: '', example: '' },
 ];
 
 interface ModeSelectorProps {

@@ -195,12 +195,12 @@ class GhostModeEnforcer:
                 import httpx
                 try:
                     async with httpx.AsyncClient(timeout=3) as client:
-                        base_url = settings.OLLAMA_BASE_URL or "http://localhost:11434"
+                        base_url = settings.LLAMA_CPP_BASE_URL or "http://localhost:8000/v1"
                         r = await client.get(f"{base_url}/api/tags")
                         if r.status_code != 200:
-                            return False, f"{level.value.title()} Mode requires Ollama at {base_url}, but it is not responding."
+                            return False, f"{level.value.title()} Mode requires llama.cpp at {base_url}, but it is not responding."
                 except Exception:
-                    return False, f"{level.value.title()} Mode requires Ollama at {base_url or 'http://localhost:11434'}, but it is not reachable."
+                    return False, f"{level.value.title()} Mode requires llama.cpp at {base_url or 'http://localhost:8000/v1'}, but it is not reachable."
             elif override == "browser":
                 # Browser mode always allowed (WebLLM runs client-side)
                 pass

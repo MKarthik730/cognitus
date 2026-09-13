@@ -1,20 +1,75 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 
-const LLM_MODES = [
-  { value: 'free', label: 'Free', desc: 'Groq / Google Gemini (rate-limited)' },
-  { value: 'local', label: 'Local', desc: 'Ollama (run locally)' },
-  { value: 'paid', label: 'Paid', desc: 'OpenAI / Anthropic (your own key)' },
-  { value: 'browser', label: 'Browser', desc: 'Browser-based (experimental)' },
-];
+// Fallback shown if /api/sources can't be reached — kept in sync with
+// backend/app/services/live_sources.py CURATED_SOURCES.
+const FALLBACK_CATEGORIES: Record<string, { name: string }[]> = {
+  students: [{ name: 'Wikipedia' }, { name: 'arXiv' }, { name: 'dev.to' }, { name: 'GitHub' }],
+  researchers: [{ name: 'arXiv' }, { name: 'Semantic Scholar' }, { name: 'OpenAlex' }, { name: 'Crossref' }, { name: 'PubMed' }],
+  finance: [{ name: 'SEC EDGAR' }, { name: 'CoinGecko' }, { name: 'MarketWatch' }, { name: 'Federal Reserve' }],
+  tech_news: [{ name: 'Hacker News' }, { name: 'NVD' }, { name: 'dev.to' }, { name: 'GitHub' }],
+  world_news: [{ name: 'GDELT' }, { name: 'BBC News' }, { name: 'Wikipedia' }],
+  legal: [{ name: 'CourtListener' }, { name: 'GDELT' }],
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  students: 'Students',
+  researchers: 'Researchers',
+  finance: 'Finance & Markets',
+  tech_news: 'Tech News',
+  world_news: 'World News',
+  legal: 'Legal',
+};
 
 export const SettingsPanel: React.FC = () => {
   const isOpen = useSettingsStore((s) => s.isSettingsOpen);
   const setOpen = useSettingsStore((s) => s.setSettingsOpen);
-  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
-  const setGroqApiKey = useSettingsStore((s) => s.setGroqApiKey);
-  const llmMode = useSettingsStore((s) => s.llmMode);
-  const setLlmMode = useSettingsStore((s) => s.setLlmMode);
+
+  const llmBaseUrl = useSettingsStore((s) => s.llmBaseUrl);
+  const setLlmBaseUrl = useSettingsStore((s) => s.setLlmBaseUrl);
+  const llmApiKey = useSettingsStore((s) => s.llmApiKey);
+  const setLlmApiKey = useSettingsStore((s) => s.setLlmApiKey);
+  const llmModelName = useSettingsStore((s) => s.llmModelName);
+  const setLlmModelName = useSettingsStore((s) => s.setLlmModelName);
+
+  const researchEnabled = useSettingsStore((s) => s.researchEnabled);
+  const setResearchEnabled = useSettingsStore((s) => s.setResearchEnabled);
+  const researchCategories = useSettingsStore((s) => s.researchCategories);
+  const toggleResearchCategory = useSettingsStore((s) => s.toggleResearchCategory);
+  const customUrls = useSettingsStore((s) => s.customUrls);
+  const addCustomUrl = useSettingsStore((s) => s.addCustomUrl);
+  const removeCustomUrl = useSettingsStore((s) => s.removeCustomUrl);
+
+  const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/sources')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.categories) setCategories(data.categories);
+      })
+      .catch(() => {
+        /* keep fallback list */
+      });
+  }, [isOpen]);
+
+  const handleAddUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!/^https?:\/\/.+/i.test(trimmed)) {
+      setUrlError('Enter a full http:// or https:// URL');
+      return;
+    }
+    if (customUrls.length >= 5) {
+      setUrlError('Up to 5 custom URLs at a time');
+      return;
+    }
+    addCustomUrl(trimmed);
+    setUrlInput('');
+    setUrlError('');
+  };
 
   const handleClose = () => setOpen(false);
 
@@ -56,85 +111,154 @@ export const SettingsPanel: React.FC = () => {
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-            {/* LLM Mode */}
+            {/* LLM Endpoint */}
             <div>
               <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
-                LLM Provider
+                LLM Endpoint
               </label>
               <p className="text-[10px] text-muted mt-0.5 mb-2">
-                Choose which AI backend powers the council.
+                Local by default. Paste any OpenAI-compatible URL instead — a
+                tunneled Kaggle/Colab endpoint (ngrok, cloudflared), or a
+                hosted provider — plus a key if it requires one.
               </p>
-              <div className="space-y-1.5">
-                {LLM_MODES.map((m) => (
-                  <button
-                    key={m.value}
-                    onClick={() => setLlmMode(m.value)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md border text-left transition-all ${
-                      llmMode === m.value
-                        ? 'border-pulse bg-surface-raised shadow-[0_0_8px_rgba(99,102,241,0.1)]'
-                        : 'border-border bg-void hover:border-pulse/40'
-                    }`}
-                  >
-                    <span
-                      className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                        llmMode === m.value ? 'border-pulse' : 'border-muted'
-                      }`}
-                    >
-                      {llmMode === m.value && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-pulse" />
-                      )}
-                    </span>
-                    <div>
-                      <span className="text-[12px] font-medium text-white">
-                        {m.label}
-                      </span>
-                      <p className="text-[10px] text-muted">{m.desc}</p>
-                    </div>
-                  </button>
-                ))}
+
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">Base URL</label>
+                  <input
+                    type="text"
+                    value={llmBaseUrl}
+                    onChange={(e) => setLlmBaseUrl(e.target.value)}
+                    placeholder="http://localhost:8000/v1"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">API Key (optional)</label>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder="only needed for cloud/tunneled endpoints"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[9px] text-ghost uppercase tracking-wider">Model name (optional)</label>
+                  <input
+                    type="text"
+                    value={llmModelName}
+                    onChange={(e) => setLlmModelName(e.target.value)}
+                    placeholder="qwen2.5-1.5b-instruct-q4_k_m.gguf"
+                    className="w-full mt-1 h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="h-px bg-border" />
 
-            {/* Groq API Key */}
+            {/* Live Research (real-time data) */}
             <div>
-              <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
-                Groq API Key
-              </label>
-              <p className="text-[10px] text-muted mt-0.5 mb-2">
-                Required for the <strong className="text-white">Free</strong> provider tier. Get yours at{' '}
-                <a
-                  href="https://console.groq.com/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-pulse hover:underline"
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
+                    Live Research
+                  </label>
+                  <p className="text-[10px] text-muted mt-0.5">
+                    Pull real-time context from free sources before analysis.
+                  </p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={researchEnabled}
+                  onClick={() => setResearchEnabled(!researchEnabled)}
+                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                    researchEnabled ? 'bg-pulse' : 'bg-border'
+                  }`}
                 >
-                  console.groq.com
-                </a>
-              </p>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={groqApiKey}
-                  onChange={(e) => setGroqApiKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="w-full h-9 px-3 pr-9 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
-                />
-                {groqApiKey && (
-                  <button
-                    onClick={() => setGroqApiKey('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ghost hover:text-white transition-colors"
-                    title="Clear key"
-                  >
-                    ✕
-                  </button>
-                )}
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                      researchEnabled ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
-              {groqApiKey && (
-                <p className="text-[10px] text-green-400 mt-1">
-                  ✓ Key stored locally and will be sent with each analysis
-                </p>
+
+              {researchEnabled && (
+                <div className="mt-3 space-y-3">
+                  {/* Curated category picker */}
+                  <div>
+                    <p className="text-[9px] text-ghost uppercase tracking-wider mb-1.5">
+                      Curated sources
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.keys(categories).map((cat) => {
+                        const active = researchCategories.includes(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => toggleResearchCategory(cat)}
+                            title={categories[cat]?.map((s) => s.name).join(', ')}
+                            className={`px-2 py-1 rounded text-[10px] border transition-colors ${
+                              active
+                                ? 'border-pulse bg-surface-raised text-white'
+                                : 'border-border bg-void text-muted hover:border-pulse/40'
+                            }`}
+                          >
+                            {CATEGORY_LABELS[cat] || cat}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom URL input */}
+                  <div>
+                    <p className="text-[9px] text-ghost uppercase tracking-wider mb-1.5">
+                      Custom URL
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={urlInput}
+                        onChange={(e) => { setUrlInput(e.target.value); setUrlError(''); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddUrl(); }}
+                        placeholder="https://example.com/feed"
+                        className="flex-1 min-w-0 bg-void border border-border rounded px-2 py-1.5 text-[11px] text-white placeholder-muted focus:outline-none focus:border-pulse/60"
+                      />
+                      <button
+                        onClick={handleAddUrl}
+                        className="px-2.5 py-1.5 rounded border border-border bg-surface-raised text-[10px] text-white hover:border-pulse/40"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {urlError && (
+                      <p className="text-[10px] text-red-400 mt-1">{urlError}</p>
+                    )}
+                    {customUrls.length > 0 && (
+                      <ul className="mt-1.5 space-y-1">
+                        {customUrls.map((url) => (
+                          <li
+                            key={url}
+                            className="flex items-center justify-between gap-2 bg-void border border-border rounded px-2 py-1"
+                          >
+                            <span className="text-[10px] text-muted truncate">{url}</span>
+                            <button
+                              onClick={() => removeCustomUrl(url)}
+                              className="text-ghost hover:text-white text-[10px] flex-shrink-0"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -155,8 +279,9 @@ export const SettingsPanel: React.FC = () => {
                     analysis request.
                   </p>
                   <p className="text-[10px] text-ghost leading-relaxed mt-1">
-                    Other providers (OpenAI, Anthropic) can be configured via
-                    the server's <code className="text-white">.env</code> file.
+                    Leave the LLM endpoint blank to use the local llama.cpp
+                    server at <code className="text-white">http://localhost:8000</code>,
+                    or set a URL above to use a tunneled or cloud-hosted model instead.
                   </p>
                 </div>
               </div>

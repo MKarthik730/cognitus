@@ -6,6 +6,11 @@ type AuthTab = 'login' | 'register';
 export const AuthModal: React.FC = () => {
   const isOpen = useAuthStore((s) => s.isAuthOpen);
   const setAuthOpen = useAuthStore((s) => s.setAuthOpen);
+  const token = useAuthStore((s) => s.token);
+  // Once there's no token yet, sign-in is mandatory — no backdrop-click or
+  // ✕ dismissal, otherwise the app is browsable/submittable behind the modal
+  // and only bounces the user back to login on a later 401.
+  const dismissible = !!token;
   const login = useAuthStore((s) => s.login);
   const register = useAuthStore((s) => s.register);
   const isSubmitting = useAuthStore((s) => s.isSubmitting);
@@ -54,7 +59,7 @@ export const AuthModal: React.FC = () => {
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm"
-        onClick={() => setAuthOpen(false)}
+        onClick={() => dismissible && setAuthOpen(false)}
       />
 
       {/* Modal */}
@@ -74,12 +79,14 @@ export const AuthModal: React.FC = () => {
                 council
               </span>
             </div>
-            <button
-              onClick={() => setAuthOpen(false)}
-              className="w-6 h-6 flex items-center justify-center text-ghost hover:text-white transition-colors"
-            >
-              ✕
-            </button>
+            {dismissible && (
+              <button
+                onClick={() => setAuthOpen(false)}
+                className="w-6 h-6 flex items-center justify-center text-ghost hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {/* Tabs */}

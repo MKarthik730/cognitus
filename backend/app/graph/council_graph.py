@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -23,6 +24,9 @@ from app.agents.stress_tester import StressTester
 from app.graph.state import CouncilState, DomainName, AnalysisMode
 from app.services.hf_service import HFService
 from app.services.llm_router import get_llm_router
+from app.services.enrichment import live_research_enrichment
+
+logger = logging.getLogger(__name__)
 
 
 class CouncilGraph:
@@ -368,6 +372,22 @@ class CouncilGraph:
         user_id: int,
         analysis_mode: AnalysisMode = "standard",
     ) -> CouncilState:
+        if analysis_mode in ("standard", "deep_research", "debate", "engineering"):
+            try:
+                live_sources = await live_research_enrichment(situation, analysis_mode)
+                if live_sources:
+                    source_context = "\n".join(
+                        f"- [{item.get('source', 'public source')}] {item.get('title', '')}: "
+                        f"{item.get('content', '')} Source: {item.get('source_url', '')}"
+                        for item in live_sources[:18]
+                    )
+                    situation = (
+                        f"{situation}\n\n=== CURRENT PUBLIC SOURCES (verify before relying on them) ===\n"
+                        f"{source_context}"
+                    )
+            except Exception as exc:
+                logger.warning("Live research enrichment failed: %s", exc)
+
         # Dict dispatch for special analysis modes — avoids code duplication
         mode_fns = {
             "signal_vs_noise": self.run_signal_noise,

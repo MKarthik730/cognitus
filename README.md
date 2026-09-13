@@ -29,7 +29,7 @@ Everything streams to an animated canvas graph over WebSocket in real time.
 
 | Layer | Technology |
 |---|---|
-| LLM Provider | Pluggable: HuggingFace · Groq · Anthropic · OpenRouter · Ollama |
+| LLM Provider | Local llama.cpp OpenAI-compatible API |
 | Backend | FastAPI + Uvicorn + WebSockets |
 | Frontend | Vanilla JS + Canvas API + Vite |
 | Document Extraction | PDF.js (browser) · mammoth.js (browser) · PyMuPDF (server) · python-docx (server) |
@@ -67,8 +67,8 @@ docker compose up --build
 ```
 
 Frontend: http://localhost:5173  
-Backend API: http://localhost:8000  
-API docs: http://localhost:8000/docs
+Backend API: http://localhost:8001  
+API docs: http://localhost:8001/docs
 
 ---
 
@@ -89,7 +89,7 @@ cd frontend && npm install && cd ..
 docker compose up -d postgres redis
 
 # Backend (port 8000)
-uvicorn backend.main:app --reload --port 8000
+uvicorn main:app --app-dir backend --reload --port 8001
 
 # Frontend (port 5173)
 cd frontend && npm run dev
@@ -99,19 +99,11 @@ cd frontend && npm run dev
 
 ---
 
-## LLM Providers
+## Local LLM
 
-Set `LLM_PROVIDER` in `.env` to one of:
-
-| Value | Model default | Required env var |
-|---|---|---|
-| `huggingface` | Llama-3.2-1B-Instruct | `HF_API_TOKEN` |
-| `groq` | llama3-8b-8192 | `GROQ_API_KEY` |
-| `anthropic` | claude-3-haiku-20240307 | `ANTHROPIC_API_KEY` |
-| `openrouter` | any (passthrough) | `OPENROUTER_API_KEY` |
-| `ollama` | configurable | `OLLAMA_BASE_URL` |
-
-The provider/model can also be switched at runtime from the Settings panel in the frontend (stored in `localStorage`).
+Run llama.cpp's OpenAI-compatible server on `http://localhost:8000` with the
+`qwen2.5-1.5b-instruct-q4_k_m.gguf` model. Cognitus connects to
+`http://localhost:8000/v1`; its own API runs on port 8001.
 
 **HuggingFace fallback chain:** `Llama-3.2-1B-Instruct` → `DeepSeek-R1-Distill-Qwen-1.5B` → `Arch-Router-1.5B`
 

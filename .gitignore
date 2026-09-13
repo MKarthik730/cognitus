@@ -32,8 +32,12 @@ Thumbs.db
 # Ruff
 .ruff_cache/
 
+# Logs
+*.log
+
 # Windows
 nul
+ren .txt
 
 DEV_LOG.md
 UPGRADE_TASKS.md

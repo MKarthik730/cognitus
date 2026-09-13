@@ -8,65 +8,21 @@ interface RenderNode extends GraphNode {
   y: number;
 }
 
-// Layout: arrange nodes in a layered DAG layout
+// Layout: place the synthesizer at the center and perspectives around it.
 function layoutNodes(nodes: GraphNode[], edges: { from: string; to: string }[]): RenderNode[] {
   if (nodes.length === 0) return [];
+  const center = nodes.find((node) => node.role === 'synthesizer' || node.role === 'verdict');
+  const outer = nodes.filter((node) => node.id !== center?.id);
+  const result: RenderNode[] = center ? [{ ...center, x: 410, y: 275 }] : [];
+  const radiusX = outer.length > 5 ? 285 : 245;
+  const radiusY = outer.length > 5 ? 185 : 170;
 
-  // Build adjacency
-  const inDegree: Record<string, number> = {};
-  const children: Record<string, string[]> = {};
-  nodes.forEach((n) => {
-    inDegree[n.id] = 0;
-    children[n.id] = [];
-  });
-  edges.forEach((e) => {
-    if (inDegree[e.to] !== undefined) inDegree[e.to]++;
-    if (children[e.from]) children[e.from].push(e.to);
-  });
-
-  // Topological sort for layers
-  const layers: string[][] = [];
-  const visited = new Set<string>();
-
-  const queue = nodes.filter((n) => inDegree[n.id] === 0).map((n) => n.id);
-  while (queue.length > 0) {
-    const layer: string[] = [];
-    const next: string[] = [];
-    for (const id of queue) {
-      if (visited.has(id)) continue;
-      visited.add(id);
-      layer.push(id);
-      for (const child of children[id] || []) {
-        if (!visited.has(child)) next.push(child);
-      }
-    }
-    if (layer.length > 0) layers.push(layer);
-    queue.length = 0;
-    queue.push(...next);
-  }
-
-  // Add any remaining nodes not in the topological order
-  const remaining = nodes.filter((n) => !visited.has(n.id)).map((n) => n.id);
-  if (remaining.length > 0) layers.push(remaining);
-
-  const padding = 60;
-  const layerGap = 180;
-  const colGap = 150;
-  const totalW = 700;
-  const totalH = 450;
-
-  const result: RenderNode[] = [];
-  layers.forEach((layer, li) => {
-    const count = layer.length;
-    const startY = (totalH - (count - 1) * colGap) / 2;
-    layer.forEach((id, ci) => {
-      const node = nodes.find((n) => n.id === id);
-      if (!node) return;
-      result.push({
-        ...node,
-        x: padding + li * layerGap + (totalW - layerGap * layers.length) / 2,
-        y: startY + ci * colGap,
-      });
+  outer.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (index / Math.max(outer.length, 1)) * Math.PI * 2;
+    result.push({
+      ...node,
+      x: 410 + Math.cos(angle) * radiusX,
+      y: 275 + Math.sin(angle) * radiusY,
     });
   });
 
@@ -202,7 +158,7 @@ export const GraphCanvas: React.FC = () => {
           return (
             <g key={`${edge.from}-${edge.to}`}>
               <path
-                d={edgePath(from.x + 65, from.y + 24, to.x + 65, to.y + 24)}
+                d={edgePath(from.x, from.y, to.x, to.y)}
                 fill="none"
                 stroke={strokeColor}
                 strokeWidth={strokeWidth}
@@ -212,20 +168,20 @@ export const GraphCanvas: React.FC = () => {
               {/* Flow particles when data is flowing */}
               {(isActive || hasData) && (
                 <path
-                  d={edgePath(from.x + 65, from.y + 24, to.x + 65, to.y + 24)}
+                  d={edgePath(from.x, from.y, to.x, to.y)}
                   fill="none"
                   stroke={strokeColor}
                   strokeWidth={1.5}
                   strokeDasharray="4 6"
-                  className="animate-flow-particles"
+                  className="graph-flow-particles"
                   opacity={0.6}
                 />
               )}
               {/* Conflict icon */}
               {isConflict && (
                 <text
-                  x={(from.x + to.x) / 2 + 65}
-                  y={(from.y + to.y) / 2 + 24}
+                  x={(from.x + to.x) / 2}
+                  y={(from.y + to.y) / 2}
                   textAnchor="middle"
                   fontSize="14"
                   fill="#F59E0B"
@@ -245,8 +201,8 @@ export const GraphCanvas: React.FC = () => {
           const isCustom = node.id.startsWith('custom_');
           const output = nodeOutputs[node.id];
           const color = NODE_COLORS[node.color] ?? NODE_COLORS.indigo;
-          const cx = node.x + 65;
-          const cy = node.y + 24;
+          const cx = node.x;
+          const cy = node.y;
 
           const nodeFill = isDone ? color : '#131B2A';
           const nodeStroke = isActive
@@ -276,7 +232,7 @@ export const GraphCanvas: React.FC = () => {
                   stroke="#22D3EE"
                   strokeWidth={1}
                   opacity={0.3}
-                  className="animate-ping"
+                  className="graph-active-ring"
                 />
               )}
 
@@ -290,35 +246,33 @@ export const GraphCanvas: React.FC = () => {
                   stroke={color}
                   strokeWidth={0.5}
                   opacity={0.2}
-                  className="animate-ripple"
+                  className="graph-complete-ring"
                 />
               )}
 
-              {/* Node body — pill shape */}
-              <rect
-                x={node.x}
-                y={node.y}
-                width={130}
-                height={48}
-                rx={24}
-                ry={24}
+              {/* Node body — circular perspective marker */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={isActive || isDone ? 43 : 39}
                 fill={nodeFill}
                 stroke={nodeStroke}
                 strokeWidth={isActive ? 2 : 1.5}
                 strokeDasharray={strokeDash}
                 filter={glowFilter}
-                className={`transition-all duration-500 ${!isActive && !isDone ? 'hover:stroke-pulse/50' : ''}`}
+                className={`graph-node-body transition-all duration-500 ${!isActive && !isDone ? 'hover:stroke-pulse/50' : ''}`}
               />
 
-              {/* Color strip on top — matching pill curve */}
-              <rect
-                x={node.x + 4}
-                y={node.y}
-                width={122}
-                height={3}
-                rx={1.5}
-                fill={color}
-                opacity={isDone ? 1 : 0.4}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={34}
+                fill="none"
+                stroke={color}
+                strokeWidth={3}
+                strokeDasharray="2 8"
+                opacity={isDone ? 0.9 : 0.35}
+                className="graph-orbit"
               />
 
               {/* Custom node indicator */}
@@ -368,9 +322,7 @@ export const GraphCanvas: React.FC = () => {
                 </text>
               )}
 
-              {/* Connection dots */}
-              <circle cx={node.x + 65} cy={node.y} r={2.5} fill="#1E2D45" />
-              <circle cx={node.x + 65} cy={node.y + 48} r={2.5} fill="#1E2D45" />
+              <circle cx={cx} cy={cy} r={3} fill={isActive ? '#22D3EE' : color} opacity={isDone ? 1 : 0.65} />
             </g>
           );
         })}
@@ -484,6 +436,23 @@ const NodePopoverContent: React.FC<NodePopoverContentProps> = ({ node, output, o
             </ul>
           </div>
         )}
+
+        {(output?.evidence?.length || output?.uncertainty?.length) ? (
+          <div className="mt-3 pt-3 border-t border-border space-y-2">
+            {output.evidence && output.evidence.length > 0 && (
+              <div>
+                <span className="text-[9px] text-cyan-300 font-semibold uppercase tracking-wider">Evidence basis</span>
+                <p className="mt-1 text-[11px] text-white leading-relaxed">{output.evidence.join(' • ')}</p>
+              </div>
+            )}
+            {output.uncertainty && output.uncertainty.length > 0 && (
+              <div>
+                <span className="text-[9px] text-amber-300 font-semibold uppercase tracking-wider">Uncertainty</span>
+                <p className="mt-1 text-[11px] text-white leading-relaxed">{output.uncertainty.join(' • ')}</p>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* Verdict */}
         {output?.verdict && (

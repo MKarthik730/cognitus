@@ -15,7 +15,7 @@ async def update_config(body: dict):
     """
     llm_mode = body.get("llm_mode")
     if llm_mode is not None:
-        valid_modes = {"free", "local", "paid", "browser"}
+        valid_modes = {"local"}
         if llm_mode not in valid_modes:
             return {"status": "error", "message": f"Invalid llm_mode. Must be one of: {', '.join(valid_modes)}"}
         logger.info("LLM mode updated to: %s", llm_mode)

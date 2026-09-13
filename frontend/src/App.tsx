@@ -13,6 +13,7 @@ import { NodePopover } from './components/NodePopover';
 import { ModeSelector } from './components/ModeSelector';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AuthModal } from './components/AuthModal';
+import { isSpecialMode, specialModeGraph } from './utils/specialModes';
 
 const App: React.FC = () => {
   const status = useGraphStore((s) => s.status);
@@ -20,7 +21,6 @@ const App: React.FC = () => {
   const setGraph = useGraphStore((s) => s.setGraph);
   const setSessionId = useGraphStore((s) => s.setSessionId);
   const mode = useGraphStore((s) => s.mode);
-  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const token = useAuthStore((s) => s.token);
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -43,6 +43,34 @@ const App: React.FC = () => {
       const sid = `session_${Date.now()}`;
       setSessionId(sid);
 
+      const connectAnalysis = (plan: ReturnType<typeof specialModeGraph>) => {
+        setGraph(plan!);
+        setStatus('analyzing');
+        const {
+          researchEnabled, researchCategories, customUrls,
+          llmBaseUrl, llmApiKey, llmModelName,
+        } = useSettingsStore.getState();
+        ws.connect(sid, {
+          situation: q,
+          graph: plan,
+          analysis_mode: mode,
+          research_enabled: researchEnabled,
+          research_categories: researchCategories,
+          custom_urls: customUrls,
+          llm_base_url: llmBaseUrl,
+          llm_api_key: llmApiKey,
+          llm_model: llmModelName,
+        });
+      };
+
+      // Special modes (debate, pre-mortem, etc.) run one fixed analyzer, not a
+      // dynamic expert roster — skip the Planner call, which would otherwise
+      // invent a plausible-looking but disconnected "6 agent" preview graph.
+      if (isSpecialMode(mode)) {
+        connectAnalysis(specialModeGraph(mode));
+        return;
+      }
+
       // Call planner to generate the node graph
       const res = await fetch('/api/plan/', {
         method: 'POST',
@@ -55,16 +83,7 @@ const App: React.FC = () => {
 
       if (res.ok) {
         const plan = await res.json();
-        setGraph(plan);
-
-        // Connect WebSocket for real-time streaming with API key
-        setStatus('analyzing');
-        ws.connect(sid, {
-          situation: q,
-          graph: plan,
-          analysis_mode: mode,
-          groq_api_key: groqApiKey || undefined,
-        });
+        connectAnalysis(plan);
       } else if (res.status === 401) {
         // Token expired or invalid — re-prompt auth
         useAuthStore.getState().setAuthOpen(true);
@@ -78,9 +97,14 @@ const App: React.FC = () => {
     }
   };
 
+  const handleNewSession = () => {
+    ws.disconnect();
+    useGraphStore.getState().reset();
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-void overflow-hidden">
-      <Header />
+      <Header onNewSession={handleNewSession} />
 
       {status === 'idle' ? (
         <ModeSelector onAnalyze={handleAnalyze} />

@@ -10,27 +10,11 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # LLM Router — 4-mode system
+    # Local llama.cpp server (OpenAI-compatible API)
     # ------------------------------------------------------------------
-    LLM_MODE: str = "free"  # free | local | paid | browser
-
-    # Mode 1: Free (Groq)
-    GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
-
-    # Mode 1: Free (Google fallback)
-    GOOGLE_API_KEY: str = ""
-
-    # Mode 2: Local (Ollama)
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = ""  # empty = auto-detect
-
-    # Mode 3: Paid (BYOK)
-    PAID_PROVIDER: str = "openai"  # openai | anthropic
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
-    ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-20241022"
+    LLM_MODE: str = "local"
+    LLAMA_CPP_BASE_URL: str = "http://localhost:8000/v1"
+    LLAMA_CPP_MODEL: str = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
 
     # Legacy HuggingFace (for backward compat / image analysis)
     HF_API_TOKEN: str = ""
@@ -88,6 +72,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     TAVILY_API_KEY: str = ""
     ENRICHMENT_ENABLED: bool = True
+    RESEARCH_ENABLED: bool = True
+    SEARXNG_BASE_URL: str = ""
+    RESEARCH_MAX_RESULTS: int = 3
 
     # ------------------------------------------------------------------
     # Eval Harness

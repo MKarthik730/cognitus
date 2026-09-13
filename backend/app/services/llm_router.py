@@ -1,11 +1,8 @@
 """
-LLM Router — 4-mode extensible provider dispatch.
+LLM Router for a local llama.cpp OpenAI-compatible server.
 
-Modes:
-  free    → Groq API (default: llama-3.3-70b-versatile, fallback: gemini-flash-1.5)
-  local   → Ollama at localhost:11434 (auto-detects hardware → recommends model)
-  paid    → BYOK: OpenAI (ChatOpenAI) or Anthropic (ChatAnthropic)
-  browser → WebLLM (frontend-only, backend returns a stub)
+The application uses the llama.cpp server at LLAMA_CPP_BASE_URL and sends
+requests for the configured GGUF model.
 
 The router provides the same interface as the legacy HFService:
     generate(system, user, max_tokens) → (response_text, model_name)
@@ -38,15 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class LLMMode(str, Enum):
-    FREE = "free"
     LOCAL = "local"
-    PAID = "paid"
-    BROWSER = "browser"
-
-
-class PaidProvider(str, Enum):
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
 
 
 # ---------------------------------------------------------------------------
@@ -252,22 +241,7 @@ class GroqProvider(LLMProvider):
             logger.warning("Failed to init Groq client: %s", e)
             self._client = None
 
-        # Optional Gemini fallback
-        try:
-            google_key = settings.GOOGLE_API_KEY or os.environ.get("GOOGLE_API_KEY")
-            if google_key:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                self._fallback_client = ChatGoogleGenerativeAI(
-                    model=self.FALLBACK_MODEL,
-                    api_key=google_key,
-                    temperature=0.3,
-                )
-            else:
-                self._fallback_client = None
-        except ImportError:
-            self._fallback_client = None
-        except Exception:
-            self._fallback_client = None
+        self._fallback_client = None
 
     async def generate(
         self, system: str, user: str, max_tokens: int | None = None
@@ -303,46 +277,49 @@ class GroqProvider(LLMProvider):
 
 
 # ---------------------------------------------------------------------------
-# Provider: Local (Ollama)
+# Provider: Local llama.cpp
 # ---------------------------------------------------------------------------
 
-class OllamaProvider(LLMProvider):
-    """Local inference via Ollama using LangChain ChatOllama.
+class LlamaCppProvider(LLMProvider):
+    """Inference through any OpenAI-compatible /v1/chat/completions endpoint.
 
-    Model is auto-recommended based on hardware detection.
+    Despite the name, this isn't limited to a local llama.cpp server — the
+    base_url/model/api_key are all overridable per-request, so this same
+    provider talks to a local server, a tunneled endpoint (ngrok/cloudflared
+    fronting a Kaggle-hosted model), or any other OpenAI-compatible host.
+    Falls back to the configured local defaults when no override is given.
     """
 
-    def __init__(self, model: str | None = None, base_url: str = "http://localhost:11434") -> None:
-        self.base_url = base_url
-        # If no model specified, detect hardware and recommend
-        if model:
-            self.model = model
-        else:
-            hw = HardwareInfo().detect()
-            self.model = hw.recommended_model
-            logger.info("Ollama auto-selected model: %s (%.0f%% accuracy)", self.model, hw.accuracy * 100)
-
+    def __init__(
+        self,
+        base_url: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
+        self.base_url = (base_url or settings.LLAMA_CPP_BASE_URL).rstrip("/")
+        self.model = model or settings.LLAMA_CPP_MODEL
+        self._api_key = api_key or "not-needed"
         self._client: Any = None
         self._init_client()
 
     def _init_client(self) -> None:
         try:
-            from langchain_ollama import ChatOllama
-            self._client = ChatOllama(
+            from langchain_openai import ChatOpenAI
+            self._client = ChatOpenAI(
                 model=self.model,
                 base_url=self.base_url,
+                api_key=self._api_key,
                 temperature=0.3,
-                num_predict=4096,
             )
         except Exception as e:
-            logger.error("Failed to init Ollama client: %s", e)
+            logger.error("Failed to init LLM client for %s: %s", self.base_url, e)
             self._client = None
 
     async def generate(
         self, system: str, user: str, max_tokens: int | None = None
     ) -> tuple[str, str]:
         if not self._client:
-            raise RuntimeError("Ollama client not initialized")
+            raise RuntimeError(f"LLM client not initialized for endpoint {self.base_url}")
 
         max_tokens = max_tokens or 512
         messages = [
@@ -352,11 +329,11 @@ class OllamaProvider(LLMProvider):
         try:
             response = await self._client.ainvoke(
                 messages,
-                options={"num_predict": max_tokens},
+                max_tokens=max_tokens,
             )
             return response.content.strip(), self.model
         except Exception as e:
-            logger.error("Ollama generate failed: %s", e)
+            logger.error("llama.cpp generate failed: %s", e)
             raise
 
 
@@ -479,31 +456,31 @@ class LLMRouter:
         text = await router.generate_with_image("system", "user", image_uri)
         text = await router.summarize_text(long_text)
 
-    Accepts an optional api_key to override env/settings-based key
-    (used when frontend passes Groq key via WebSocket).
+    Accepts optional overrides for the endpoint (base_url), model name, and
+    api_key — so the same router can point at a local llama.cpp server, a
+    tunneled endpoint (e.g. ngrok/cloudflared fronting a Kaggle-hosted model),
+    or any other OpenAI-compatible host, without redeploying.
     """
 
-    def __init__(self, mode: str | None = None, api_key: str | None = None) -> None:
-        self.mode = LLMMode(mode or settings.LLM_MODE or LLMMode.FREE.value)
+    def __init__(
+        self,
+        mode: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.mode = LLMMode.LOCAL
         self._provider: LLMProvider | None = None
         self._hardware: HardwareInfo | None = None
         self._api_key = api_key
+        self._base_url = base_url
+        self._model = model
         self._init_provider()
 
     def _init_provider(self) -> None:
-        if self.mode == LLMMode.FREE:
-            self._provider = GroqProvider(api_key=self._api_key)
-        elif self.mode == LLMMode.LOCAL:
-            hw = self._detect_hardware()
-            self._provider = OllamaProvider(model=hw.recommended_model)
-        elif self.mode == LLMMode.PAID:
-            self._provider = PaidProvider_()
-        elif self.mode == LLMMode.BROWSER:
-            self._provider = BrowserProvider()
-        else:
-            logger.warning("Unknown LLM mode '%s', falling back to Free", self.mode)
-            self.mode = LLMMode.FREE
-            self._provider = GroqProvider()
+        self._provider = LlamaCppProvider(
+            base_url=self._base_url, model=self._model, api_key=self._api_key,
+        )
 
     def _detect_hardware(self) -> HardwareInfo:
         if self._hardware is None:
@@ -553,12 +530,8 @@ class LLMRouter:
 
     def get_model_name(self) -> str:
         """Return the active model name string."""
-        if isinstance(self._provider, GroqProvider):
-            return GroqProvider.PRIMARY_MODEL
-        if isinstance(self._provider, OllamaProvider):
+        if isinstance(self._provider, LlamaCppProvider):
             return self._provider.model
-        if isinstance(self._provider, PaidProvider_):
-            return self._provider._model or "unknown"
         return "unknown"
 
     # ------------------------------------------------------------------
@@ -620,31 +593,15 @@ class LLMRouter:
         """Validate the current configuration. Returns list of error messages (empty = OK)."""
         errors: list[str] = []
 
-        if self.mode == LLMMode.FREE:
-            if not (settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY")):
-                errors.append("Free mode requires GROQ_API_KEY")
-
-        elif self.mode == LLMMode.LOCAL:
-            # Check if Ollama is running
+        if self.mode == LLMMode.LOCAL:
             import httpx
             try:
-                base_url = settings.OLLAMA_BASE_URL or "http://localhost:11434"
-                r = httpx.get(f"{base_url}/api/tags", timeout=3)
+                base_url = settings.LLAMA_CPP_BASE_URL.rstrip("/")
+                r = httpx.get(f"{base_url}/models", timeout=3)
                 if r.status_code != 200:
-                    errors.append(f"Ollama not responding at {base_url}")
+                    errors.append(f"llama.cpp not responding at {base_url}")
             except Exception:
-                errors.append(f"Ollama not reachable at {settings.OLLAMA_BASE_URL or 'http://localhost:11434'}")
-
-        elif self.mode == LLMMode.PAID:
-            provider = (settings.PAID_PROVIDER or "openai").lower()
-            if provider == "openai" and not (settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY")):
-                errors.append("Paid mode (OpenAI) requires OPENAI_API_KEY")
-            elif provider == "anthropic" and not (settings.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY")):
-                errors.append("Paid mode (Anthropic) requires ANTHROPIC_API_KEY")
-
-        elif self.mode == LLMMode.BROWSER:
-            # Browser mode is frontend-only — no backend validation needed
-            pass
+                errors.append(f"llama.cpp not reachable at {base_url}")
 
         return errors
 
@@ -688,17 +645,29 @@ def get_llm_router() -> LLMRouter:
     return _router_instance
 
 
-def reset_llm_router(mode: str | None = None, api_key: str | None = None) -> LLMRouter:
-    """Reset the router (e.g. when Ghost Mode overrides LLM mode).
+def reset_llm_router(
+    mode: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+) -> LLMRouter:
+    """Reset the router (e.g. when Ghost Mode or a custom endpoint is set).
 
     Args:
         mode: Optional LLM mode override.
-        api_key: Optional API key override (used for Groq when key
-                 comes from frontend via WebSocket).
+        api_key: Optional API key override (e.g. for a cloud/tunneled endpoint
+                 that requires auth, sent from the frontend per-request).
+        base_url: Optional endpoint override — a local llama.cpp URL, a
+                  tunneled endpoint (ngrok/cloudflared), or any other
+                  OpenAI-compatible host.
+        model: Optional model name override, matching what the target
+               endpoint actually serves.
     """
     global _router_instance
     _router_instance = LLMRouter(
         mode=mode or settings.LLM_MODE,
         api_key=api_key,
+        base_url=base_url,
+        model=model,
     )
     return _router_instance

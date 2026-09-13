@@ -12,6 +12,9 @@ export const AgentRoster: React.FC = () => {
   const presets = useCustomNodeStore((s) => s.presets);
   const createPendingFromPreset = useCustomNodeStore((s) => s.createPendingFromPreset);
 
+  const isResearching = useGraphStore((s) => s.isResearching);
+  const liveSources = useGraphStore((s) => s.liveSources);
+
   const nodes = graph?.nodes ?? [];
   const conflicts = edgeConflicts ?? [];
 
@@ -106,6 +109,34 @@ export const AgentRoster: React.FC = () => {
                 <span className="truncate">{preset.label}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Live research sources */}
+        {(isResearching || liveSources.length > 0) && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <div className="px-1 mb-1.5 flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${isResearching ? 'bg-signal animate-pulse' : 'bg-green-400'}`} />
+              <span className="font-display text-[9px] font-semibold uppercase tracking-widest text-muted">
+                {isResearching ? 'Researching…' : `Live Sources (${liveSources.length})`}
+              </span>
+            </div>
+            {!isResearching && liveSources.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {liveSources.map((s, i) => (
+                  <a
+                    key={i}
+                    href={s.url || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={s.title}
+                    className="block px-2 py-1 rounded-sm text-[10px] text-ghost hover:text-white hover:bg-surface-hover transition-colors truncate"
+                  >
+                    <span className="text-pulse">{s.source}</span>{s.title ? ` — ${s.title}` : ''}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
