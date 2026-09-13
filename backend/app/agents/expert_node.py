@@ -106,8 +106,17 @@ Respond in the following JSON schema:
     "reasoning": "<string>",
     "key_findings": ["<string>", ...],
     "concerns": ["<string>", ...],
-    "revision": null
+    "revision": null,
+    "evidence": ["<concrete fact, input, or logical basis>", ...],
+    "assumptions": ["<assumption that could change the conclusion>", ...],
+    "uncertainty": ["<unknown, limitation, or missing information>", ...]
 }
+
+Evidence discipline:
+- Separate facts supplied by the situation from inference and speculation.
+- Never invent citations, statistics, laws, studies, or facts not in the situation.
+- If external evidence is unavailable, say so explicitly and lower confidence.
+- Use confidence as calibrated probability, not rhetorical certainty.
 """
 
 RETRY_PROMPT = (
@@ -139,7 +148,8 @@ SUB_QUESTION_TEMPLATE = (
     'Answer this specific question:\n'
     '"{sub_question}"\n\n'
     'Use the situation below as context. Be specific, cite the numbers '
-    'in the case, and take a clear position. Do not hedge.\n\n'
+    'in the case, and take a clear position. Distinguish facts from assumptions, '
+    'and state what missing evidence could change the conclusion.\n\n'
     'SITUATION: {situation}'
 )
 
@@ -289,12 +299,41 @@ class ExpertNode:
                 )
                 self._last_raw_response = response
         else:
-            response, model = await self.hf_service.generate(
-                system,
-                situation,
-                max_tokens=settings.HF_EXPERT_MAX_TOKENS,
-            )
-            self._last_raw_response = response
+            try:
+                from app.services.structured_llm import generate_structured
+                from app.services.llm_router import get_llm_router
+
+                node_output = await generate_structured(
+                    NodeOutput, system, situation,
+                    max_tokens=settings.HF_EXPERT_MAX_TOKENS,
+                )
+                model = get_llm_router().get_model_name()
+                self._last_raw_response = node_output.model_dump_json()
+
+                if is_hallucinated(node_output):
+                    if not is_retry:
+                        logger.warning(
+                            "Expert %s: hallucination detected (structured path), retrying once.",
+                            self.domain,
+                        )
+                        return await self._generate_node_output(situation, is_retry=True)
+                    logger.error(
+                        "Expert %s: hallucination detected after retry (structured path). Marking as error.",
+                        self.domain,
+                    )
+                    return None, model
+                return node_output, model
+            except Exception as e:
+                logger.warning(
+                    "Structured generation failed for %s, falling back to manual parsing: %s",
+                    self.domain, e,
+                )
+                response, model = await self.hf_service.generate(
+                    system,
+                    situation,
+                    max_tokens=settings.HF_EXPERT_MAX_TOKENS,
+                )
+                self._last_raw_response = response
 
         # Attempt to parse and validate
         parsed = self._try_parse(response)
@@ -386,6 +425,9 @@ class ExpertNode:
             reasoning=node_output.reasoning,
             key_findings=node_output.key_findings,
             concerns=node_output.concerns,
+            evidence=node_output.evidence,
+            assumptions=node_output.assumptions,
+            uncertainty=node_output.uncertainty,
             model_used=model,
             processing_time_ms=elapsed_ms,
         )

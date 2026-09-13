@@ -592,6 +592,9 @@ async def _stream_graph_events(
     user_id: int,
     council_graph: CouncilGraph,
     ghost_level: str = "off",
+    research_enabled: bool = False,
+    research_categories: list[str] | None = None,
+    custom_urls: list[str] | None = None,
 ) -> None:
     async def on_node_start(node_name: str, status_text: str) -> None:
         await sender.send(
@@ -601,6 +604,39 @@ async def _stream_graph_events(
                 "status": status_text,
             }
         )
+
+    # Live/real-time research injection (curated free sources + user URLs)
+    if research_enabled and (research_categories or custom_urls):
+        try:
+            from app.services.live_sources import gather_curated_sources, gather_custom_urls
+
+            await sender.send({"type": "research_start"})
+            curated, custom = await asyncio.gather(
+                gather_curated_sources(research_categories or [], situation),
+                gather_custom_urls(custom_urls or []),
+            )
+            live_sources = [*custom, *curated][:20]
+            if live_sources:
+                source_context = "\n".join(
+                    f"- [{item.get('source', 'source')}] {item.get('title', '')}: "
+                    f"{item.get('content', '')} ({item.get('source_url', '')})"
+                    for item in live_sources
+                )
+                situation = (
+                    f"{situation}\n\n=== LIVE SOURCES (verify before relying on them) ===\n{source_context}"
+                )
+            await sender.send(
+                {
+                    "type": "research_sources",
+                    "sources": [
+                        {"source": i.get("source", ""), "title": i.get("title", ""), "url": i.get("source_url", "")}
+                        for i in live_sources
+                    ],
+                }
+            )
+        except Exception as e:
+            logger.warning("Live research injection failed: %s", e)
+            await sender.send({"type": "research_sources", "sources": []})
 
     # Redact PII if ghost mode is active
     if ghost_level != "off":
@@ -942,16 +978,13 @@ async def websocket_endpoint(
         situation = data.get("situation", "")
         user_id = data.get("user_id", 0)
         analysis_mode = data.get("analysis_mode", "standard")
+        if analysis_mode not in {"standard", "deep_research", "debate", "engineering"}:
+            analysis_mode = "standard"
         ghost_level = data.get("ghost_level", "off")
         enable_streaming = data.get("streaming_enabled", True)
-
-        # Use Groq API key from frontend (stored in localStorage) if provided
-        groq_api_key = data.get("groq_api_key") or os.environ.get("GROQ_API_KEY")
-        if groq_api_key:
-            logger.info("Received Groq API key (len=%d), resetting router with override", len(groq_api_key))
-            os.environ["GROQ_API_KEY"] = groq_api_key
-            # Reset the LLM router so the Groq provider picks up the new key
-            reset_llm_router(api_key=groq_api_key)
+        research_enabled = bool(data.get("research_enabled", False))
+        research_categories = data.get("research_categories") or []
+        custom_urls = data.get("custom_urls") or []
 
         if not situation:
             await sender.send({"type": "error", "message": "situation is required"})
@@ -1012,7 +1045,10 @@ async def websocket_endpoint(
 
         # Standard or Case Study pipeline
         await _stream_graph_events(
-            sender, situation, session_id, user_id, council_graph, ghost_level
+            sender, situation, session_id, user_id, council_graph, ghost_level,
+            research_enabled=research_enabled,
+            research_categories=research_categories,
+            custom_urls=custom_urls,
         )
 
     except WebSocketDisconnect:

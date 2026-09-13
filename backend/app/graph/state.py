@@ -15,8 +15,7 @@ PipelineStatus = Literal[
 ]
 
 AnalysisMode = Literal[
-    "standard", "case_study", "signal_vs_noise", "cascade_mapper",
-    "pre_mortem", "debate", "reverse_engineer", "iceberg",
+    "standard", "deep_research", "debate", "engineering",
 ]
 
 GhostLevel = Literal["off", "fog", "shadow", "void", "phantom"]
@@ -48,6 +47,9 @@ class ExpertOutput(TypedDict):
     reasoning: NotRequired[str]
     key_findings: NotRequired[list[str]]
     concerns: NotRequired[list[str]]
+    evidence: NotRequired[list[str]]
+    assumptions: NotRequired[list[str]]
+    uncertainty: NotRequired[list[str]]
     confidence_score: NotRequired[int]
     citations: NotRequired[list[str]]
     model_used: str

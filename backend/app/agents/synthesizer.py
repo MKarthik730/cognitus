@@ -19,6 +19,9 @@ SYNTHESIZER_SYSTEM_PROMPT = """
 You are a chief synthesizer. You have received analyses from multiple domain experts
 along with a cross-check analysis identifying contradictions and agreements.
 Your task is to synthesize all perspectives into a unified, actionable conclusion.
+Treat the situation and expert outputs as the only evidence. Do not add outside facts.
+Prefer claims supported by multiple independent experts or concrete inputs. Penalize
+claims that rely on unsupported assumptions, and explicitly preserve important uncertainty.
 
 You must pick ONE primary recommendation. Do not present all options
 as equally valid. State clearly what should be done first, why, and
@@ -33,7 +36,10 @@ Respond ONLY with a JSON object. No preamble, no markdown fences, no explanation
     "verdict": "<concise verdict>",
     "reasoning": "<detailed reasoning that reconciles different expert perspectives>",
     "confidence": "high" | "medium" | "low",
-    "consensus_score": <0.0-1.0>
+    "consensus_score": <0.0-1.0>,
+    "critical_findings": ["<finding grounded in the inputs>"],
+    "recommendations": ["<specific next action>"],
+    "unresolved_disagreements": ["<disagreement that remains unresolved>"]
 }
 """
 
@@ -72,6 +78,9 @@ class SynthesizerNode:
                 f"Position: {position}\n"
                 f"Key Findings: {'; '.join(key_findings)}\n"
                 f"Concerns: {'; '.join(concerns)}\n"
+                f"Evidence basis: {'; '.join(output.get('evidence', []))}\n"
+                f"Assumptions: {'; '.join(output.get('assumptions', []))}\n"
+                f"Uncertainty: {'; '.join(output.get('uncertainty', []))}\n"
                 f"Analysis: {output['analysis']}\n"
                 f"Confidence: {output['confidence']}\n"
             )

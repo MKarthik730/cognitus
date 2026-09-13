@@ -24,6 +24,18 @@ class NodeOutput(BaseModel):
         default=None,
         description="Revised position after cross-examination, if any",
     )
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="Concrete evidence, inputs, or reasoning basis for the findings",
+    )
+    assumptions: list[str] = Field(
+        default_factory=list,
+        description="Assumptions that materially affect the conclusion",
+    )
+    uncertainty: list[str] = Field(
+        default_factory=list,
+        description="Unknowns or limitations that reduce confidence",
+    )
 
 
 class CrossExamineOutput(BaseModel):

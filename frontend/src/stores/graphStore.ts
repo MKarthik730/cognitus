@@ -12,6 +12,8 @@ interface GraphState {
   status: GraphStatus;
   finalVerdict: string | null;
   edgeConflicts: EdgeConflict[];
+  liveSources: { source: string; title: string; url: string }[];
+  isResearching: boolean;
 
   // Actions
   setSessionId: (id: string) => void;
@@ -24,6 +26,8 @@ interface GraphState {
   setStatus: (status: GraphStatus) => void;
   setFinalVerdict: (verdict: string) => void;
   addEdgeConflict: (conflict: EdgeConflict) => void;
+  setResearching: (researching: boolean) => void;
+  setLiveSources: (sources: { source: string; title: string; url: string }[]) => void;
   reset: () => void;
 }
 
@@ -38,6 +42,8 @@ const initialState = {
   status: 'idle' as GraphStatus,
   finalVerdict: null as string | null,
   edgeConflicts: [] as EdgeConflict[],
+  liveSources: [] as { source: string; title: string; url: string }[],
+  isResearching: false,
 };
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -71,6 +77,10 @@ export const useGraphStore = create<GraphState>((set) => ({
     set((state) => ({
       edgeConflicts: [...state.edgeConflicts, conflict],
     })),
+
+  setResearching: (researching) => set({ isResearching: researching }),
+
+  setLiveSources: (sources) => set({ liveSources: sources, isResearching: false }),
 
   reset: () => set(initialState),
 }));

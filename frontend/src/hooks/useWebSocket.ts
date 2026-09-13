@@ -155,6 +155,15 @@ export function useWebSocket() {
             store.setStatus('error');
             break;
 
+          // Live research (real-time data) — fetching, then the sources used
+          case 'research_start':
+            store.setResearching(true);
+            break;
+
+          case 'research_sources':
+            store.setLiveSources(event.sources || []);
+            break;
+
           // Ghost mode / PII / assumptions — log but don't disrupt
           case 'ghost_disclosure':
           case 'ghost_timer':

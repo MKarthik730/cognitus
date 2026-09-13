@@ -1,20 +1,74 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 
 const LLM_MODES = [
-  { value: 'free', label: 'Free', desc: 'Groq / Google Gemini (rate-limited)' },
-  { value: 'local', label: 'Local', desc: 'Ollama (run locally)' },
-  { value: 'paid', label: 'Paid', desc: 'OpenAI / Anthropic (your own key)' },
-  { value: 'browser', label: 'Browser', desc: 'Browser-based (experimental)' },
+  { value: 'local', label: 'Local llama.cpp', desc: 'Qwen 2.5 1.5B GGUF at localhost:8000' },
 ];
+
+// Fallback shown if /api/sources can't be reached — kept in sync with
+// backend/app/services/live_sources.py CURATED_SOURCES.
+const FALLBACK_CATEGORIES: Record<string, { name: string }[]> = {
+  students: [{ name: 'Wikipedia' }, { name: 'arXiv' }, { name: 'dev.to' }, { name: 'GitHub' }],
+  researchers: [{ name: 'arXiv' }, { name: 'Semantic Scholar' }, { name: 'OpenAlex' }, { name: 'Crossref' }, { name: 'PubMed' }],
+  finance: [{ name: 'SEC EDGAR' }, { name: 'CoinGecko' }, { name: 'MarketWatch' }, { name: 'Federal Reserve' }],
+  tech_news: [{ name: 'Hacker News' }, { name: 'NVD' }, { name: 'dev.to' }, { name: 'GitHub' }],
+  world_news: [{ name: 'GDELT' }, { name: 'BBC News' }, { name: 'Wikipedia' }],
+  legal: [{ name: 'CourtListener' }, { name: 'GDELT' }],
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  students: 'Students',
+  researchers: 'Researchers',
+  finance: 'Finance & Markets',
+  tech_news: 'Tech News',
+  world_news: 'World News',
+  legal: 'Legal',
+};
 
 export const SettingsPanel: React.FC = () => {
   const isOpen = useSettingsStore((s) => s.isSettingsOpen);
   const setOpen = useSettingsStore((s) => s.setSettingsOpen);
-  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
-  const setGroqApiKey = useSettingsStore((s) => s.setGroqApiKey);
   const llmMode = useSettingsStore((s) => s.llmMode);
   const setLlmMode = useSettingsStore((s) => s.setLlmMode);
+
+  const researchEnabled = useSettingsStore((s) => s.researchEnabled);
+  const setResearchEnabled = useSettingsStore((s) => s.setResearchEnabled);
+  const researchCategories = useSettingsStore((s) => s.researchCategories);
+  const toggleResearchCategory = useSettingsStore((s) => s.toggleResearchCategory);
+  const customUrls = useSettingsStore((s) => s.customUrls);
+  const addCustomUrl = useSettingsStore((s) => s.addCustomUrl);
+  const removeCustomUrl = useSettingsStore((s) => s.removeCustomUrl);
+
+  const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlError, setUrlError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/sources')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.categories) setCategories(data.categories);
+      })
+      .catch(() => {
+        /* keep fallback list */
+      });
+  }, [isOpen]);
+
+  const handleAddUrl = () => {
+    const trimmed = urlInput.trim();
+    if (!/^https?:\/\/.+/i.test(trimmed)) {
+      setUrlError('Enter a full http:// or https:// URL');
+      return;
+    }
+    if (customUrls.length >= 5) {
+      setUrlError('Up to 5 custom URLs at a time');
+      return;
+    }
+    addCustomUrl(trimmed);
+    setUrlInput('');
+    setUrlError('');
+  };
 
   const handleClose = () => setOpen(false);
 
@@ -97,44 +151,105 @@ export const SettingsPanel: React.FC = () => {
 
             <div className="h-px bg-border" />
 
-            {/* Groq API Key */}
+            {/* Live Research (real-time data) */}
             <div>
-              <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
-                Groq API Key
-              </label>
-              <p className="text-[10px] text-muted mt-0.5 mb-2">
-                Required for the <strong className="text-white">Free</strong> provider tier. Get yours at{' '}
-                <a
-                  href="https://console.groq.com/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-pulse hover:underline"
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
+                    Live Research
+                  </label>
+                  <p className="text-[10px] text-muted mt-0.5">
+                    Pull real-time context from free sources before analysis.
+                  </p>
+                </div>
+                <button
+                  role="switch"
+                  aria-checked={researchEnabled}
+                  onClick={() => setResearchEnabled(!researchEnabled)}
+                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                    researchEnabled ? 'bg-pulse' : 'bg-border'
+                  }`}
                 >
-                  console.groq.com
-                </a>
-              </p>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={groqApiKey}
-                  onChange={(e) => setGroqApiKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="w-full h-9 px-3 pr-9 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
-                />
-                {groqApiKey && (
-                  <button
-                    onClick={() => setGroqApiKey('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ghost hover:text-white transition-colors"
-                    title="Clear key"
-                  >
-                    ✕
-                  </button>
-                )}
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                      researchEnabled ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
-              {groqApiKey && (
-                <p className="text-[10px] text-green-400 mt-1">
-                  ✓ Key stored locally and will be sent with each analysis
-                </p>
+
+              {researchEnabled && (
+                <div className="mt-3 space-y-3">
+                  {/* Curated category picker */}
+                  <div>
+                    <p className="text-[9px] text-ghost uppercase tracking-wider mb-1.5">
+                      Curated sources
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.keys(categories).map((cat) => {
+                        const active = researchCategories.includes(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => toggleResearchCategory(cat)}
+                            title={categories[cat]?.map((s) => s.name).join(', ')}
+                            className={`px-2 py-1 rounded text-[10px] border transition-colors ${
+                              active
+                                ? 'border-pulse bg-surface-raised text-white'
+                                : 'border-border bg-void text-muted hover:border-pulse/40'
+                            }`}
+                          >
+                            {CATEGORY_LABELS[cat] || cat}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom URL input */}
+                  <div>
+                    <p className="text-[9px] text-ghost uppercase tracking-wider mb-1.5">
+                      Custom URL
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={urlInput}
+                        onChange={(e) => { setUrlInput(e.target.value); setUrlError(''); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddUrl(); }}
+                        placeholder="https://example.com/feed"
+                        className="flex-1 min-w-0 bg-void border border-border rounded px-2 py-1.5 text-[11px] text-white placeholder-muted focus:outline-none focus:border-pulse/60"
+                      />
+                      <button
+                        onClick={handleAddUrl}
+                        className="px-2.5 py-1.5 rounded border border-border bg-surface-raised text-[10px] text-white hover:border-pulse/40"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {urlError && (
+                      <p className="text-[10px] text-red-400 mt-1">{urlError}</p>
+                    )}
+                    {customUrls.length > 0 && (
+                      <ul className="mt-1.5 space-y-1">
+                        {customUrls.map((url) => (
+                          <li
+                            key={url}
+                            className="flex items-center justify-between gap-2 bg-void border border-border rounded px-2 py-1"
+                          >
+                            <span className="text-[10px] text-muted truncate">{url}</span>
+                            <button
+                              onClick={() => removeCustomUrl(url)}
+                              className="text-ghost hover:text-white text-[10px] flex-shrink-0"
+                            >
+                              ✕
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -155,8 +270,8 @@ export const SettingsPanel: React.FC = () => {
                     analysis request.
                   </p>
                   <p className="text-[10px] text-ghost leading-relaxed mt-1">
-                    Other providers (OpenAI, Anthropic) can be configured via
-                    the server's <code className="text-white">.env</code> file.
+                    The council connects to your local llama.cpp server at
+                    <code className="text-white"> http://localhost:8000</code>.
                   </p>
                 </div>
               </div>

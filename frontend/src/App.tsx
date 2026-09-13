@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const setGraph = useGraphStore((s) => s.setGraph);
   const setSessionId = useGraphStore((s) => s.setSessionId);
   const mode = useGraphStore((s) => s.mode);
-  const groqApiKey = useSettingsStore((s) => s.groqApiKey);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const token = useAuthStore((s) => s.token);
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -59,11 +58,14 @@ const App: React.FC = () => {
 
         // Connect WebSocket for real-time streaming with API key
         setStatus('analyzing');
+        const { researchEnabled, researchCategories, customUrls } = useSettingsStore.getState();
         ws.connect(sid, {
           situation: q,
           graph: plan,
           analysis_mode: mode,
-          groq_api_key: groqApiKey || undefined,
+          research_enabled: researchEnabled,
+          research_categories: researchCategories,
+          custom_urls: customUrls,
         });
       } else if (res.status === 401) {
         // Token expired or invalid — re-prompt auth

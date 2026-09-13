@@ -10,8 +10,7 @@ export type NodeRole =
 export type NodeColor = 'indigo' | 'amber' | 'cyan' | 'green' | 'red' | 'purple';
 
 export type AnalysisMode =
-  | 'standard' | 'debate' | 'research' | 'decision' | 'technical' | 'cascade'
-  | 'pre_mortem' | 'signal_vs_noise' | 'iceberg' | 'reverse_engineer';
+  | 'standard' | 'deep_research' | 'debate' | 'engineering';
 
 export type GraphStatus = 'idle' | 'planning' | 'analyzing' | 'complete' | 'error';
 
@@ -60,6 +59,9 @@ export interface NodeOutput {
   sentiment: NodeSentiment;
   reasoning?: string;
   keyPoints?: string[];
+  evidence?: string[];
+  assumptions?: string[];
+  uncertainty?: string[];
 }
 
 export interface EdgeConflict {

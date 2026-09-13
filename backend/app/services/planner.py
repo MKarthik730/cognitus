@@ -92,6 +92,15 @@ Shape: branching tree expanding outward
 ### standard
 Agents: Domain decomposition specialists feeding into a synthesizer
 Shape: star/parallel — multiple experts to one synthesizer
+
+### deep_research
+Agents: Source Scout → Evidence Extractor → Contradiction Checker → Synthesis Editor → Synthesizer
+Shape: parallel source review merging into a cited, uncertainty-aware verdict
+Use supplied CURRENT PUBLIC SOURCES when present. Never invent a citation or claim a source says more than its snippet.
+
+### engineering
+Agents: Systems Architect → Security Reviewer → Reliability Engineer → Implementation Planner → Synthesizer
+Shape: parallel technical review merging into an implementation plan with risks and verification steps
 """
 
 

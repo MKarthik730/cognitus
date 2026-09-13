@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class PlannerRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
-    mode: str = Field(default="standard", pattern=r"^(standard|debate|research|decision|technical|cascade|pre_mortem|signal_vs_noise|iceberg|reverse_engineer)$")
+    mode: str = Field(default="standard", pattern=r"^(standard|deep_research|debate|engineering)$")
 
 
 class PlanNode(BaseModel):

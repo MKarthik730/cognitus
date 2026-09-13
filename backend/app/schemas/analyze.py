@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -7,7 +7,7 @@ from pydantic import BaseModel
 class AnalyzeRequest(BaseModel):
     session_id: int
     ghost_level: str = "off"
-    analysis_mode: str = "standard"
+    analysis_mode: Literal["standard", "deep_research", "debate", "engineering"] = "standard"
 
 
 class ExpertResponseSchema(BaseModel):
