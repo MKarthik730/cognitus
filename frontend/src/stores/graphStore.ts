@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import type { GraphJSON, NodeOutput, GraphStatus, AnalysisMode, NodePosition, EdgeConflict } from '../types';
+import type {
+  GraphJSON, NodeOutput, GraphStatus, AnalysisMode, NodePosition, EdgeConflict,
+  VerdictScorecard, GateStatus,
+} from '../types';
 
 interface GraphState {
   sessionId: string | null;
@@ -15,6 +18,11 @@ interface GraphState {
   liveSources: { source: string; title: string; url: string }[];
   isResearching: boolean;
 
+  // Verdict mode
+  gateStatus: GateStatus;
+  gateReason: string | null;
+  verdictScorecard: VerdictScorecard | null;
+
   // Actions
   setSessionId: (id: string) => void;
   setQuery: (query: string) => void;
@@ -28,6 +36,8 @@ interface GraphState {
   addEdgeConflict: (conflict: EdgeConflict) => void;
   setResearching: (researching: boolean) => void;
   setLiveSources: (sources: { source: string; title: string; url: string }[]) => void;
+  setGate: (status: GateStatus, reason?: string | null) => void;
+  setVerdictScorecard: (scorecard: VerdictScorecard) => void;
   reset: () => void;
 }
 
@@ -44,6 +54,9 @@ const initialState = {
   edgeConflicts: [] as EdgeConflict[],
   liveSources: [] as { source: string; title: string; url: string }[],
   isResearching: false,
+  gateStatus: 'pending' as GateStatus,
+  gateReason: null as string | null,
+  verdictScorecard: null as VerdictScorecard | null,
 };
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -81,6 +94,10 @@ export const useGraphStore = create<GraphState>((set) => ({
   setResearching: (researching) => set({ isResearching: researching }),
 
   setLiveSources: (sources) => set({ liveSources: sources, isResearching: false }),
+
+  setGate: (status, reason = null) => set({ gateStatus: status, gateReason: reason }),
+
+  setVerdictScorecard: (scorecard) => set({ verdictScorecard: scorecard }),
 
   reset: () => set(initialState),
 }));

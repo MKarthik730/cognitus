@@ -10,7 +10,7 @@ export type NodeRole =
 export type NodeColor = 'indigo' | 'amber' | 'cyan' | 'green' | 'red' | 'purple';
 
 export type AnalysisMode =
-  | 'standard' | 'deep_research' | 'debate' | 'engineering';
+  | 'standard' | 'deep_research' | 'debate' | 'engineering' | 'verdict';
 
 export type GraphStatus = 'idle' | 'planning' | 'analyzing' | 'complete' | 'error';
 
@@ -215,7 +215,115 @@ export type WSEvent =
   | WSComplete
   | WSError
   | WSGhostDisclosure
-  | WSPIIRedactions;
+  | WSPIIRedactions
+  | WSVerdictIngestStart
+  | WSVerdictIngestComplete
+  | WSVerdictCheckStart
+  | WSVerdictCheckComplete
+  | WSVerdictOpinionStart
+  | WSVerdictOpinionComplete
+  | WSVerdictClaimStart
+  | WSVerdictClaimComplete
+  | WSVerdictGateUpdate
+  | WSVerdictComplete;
+
+// ==========================================================================
+// Verdict types (mirrors backend/app/schemas/verdict_output.py)
+// ==========================================================================
+
+export type CheckName = 'tests' | 'static_analysis' | 'coverage' | 'cve' | 'secrets';
+export type CheckStatus = 'pass' | 'fail' | 'error' | 'skipped_no_data';
+export type ClaimVerdict = 'match' | 'mismatch' | 'partial' | 'unsupported';
+export type VerdictAction = 'auto_approved' | 'blocked_for_review' | 'issue_filed';
+export type GateStatus = 'locked' | 'unlocked' | 'pending';
+
+export interface DeterministicCheckResult {
+  check_name: CheckName;
+  status: CheckStatus;
+  detail: string;
+  raw_output?: string | null;
+}
+
+export interface ClaimMatchResult {
+  claim: string;
+  verdict: ClaimVerdict;
+  supporting_lines: string[];
+  confidence: number;
+}
+
+export interface OpinionFinding {
+  domain: string;
+  confidence: number;
+  position: string;
+  reasoning: string;
+  key_findings: string[];
+  concerns: string[];
+  evidence: string[];
+  assumptions: string[];
+  uncertainty: string[];
+}
+
+export interface VerdictScorecard {
+  pr_url: string;
+  deterministic_checks: DeterministicCheckResult[];
+  opinion_findings: OpinionFinding[];
+  claim_matches: ClaimMatchResult[];
+  unintended_scope: string[];
+  action_taken: VerdictAction;
+  action_reason: string;
+}
+
+export interface WSVerdictIngestStart {
+  type: 'verdict_ingest_start';
+  pr_url: string;
+}
+
+export interface WSVerdictIngestComplete {
+  type: 'verdict_ingest_complete';
+  pr_metadata: Record<string, unknown>;
+  files_changed: number;
+}
+
+export interface WSVerdictCheckStart {
+  type: 'verdict_check_start';
+  check_name: CheckName;
+}
+
+export interface WSVerdictCheckComplete {
+  type: 'verdict_check_complete';
+  check: DeterministicCheckResult;
+}
+
+export interface WSVerdictOpinionStart {
+  type: 'verdict_opinion_start';
+  domain: string;
+}
+
+export interface WSVerdictOpinionComplete {
+  type: 'verdict_opinion_complete';
+  finding: OpinionFinding;
+}
+
+export interface WSVerdictClaimStart {
+  type: 'verdict_claim_start';
+  claim: string;
+}
+
+export interface WSVerdictClaimComplete {
+  type: 'verdict_claim_complete';
+  match: ClaimMatchResult;
+}
+
+export interface WSVerdictGateUpdate {
+  type: 'verdict_gate_update';
+  gate: 'locked' | 'unlocked';
+  action_reason: string;
+}
+
+export interface WSVerdictComplete {
+  type: 'verdict_complete';
+  scorecard: VerdictScorecard;
+}
 
 // ==========================================================================
 // UI types

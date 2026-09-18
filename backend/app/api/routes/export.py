@@ -483,3 +483,105 @@ async def generate_share_link(
         "share_url": share_url,
         "expires_in_days": 7,
     }
+
+
+# ---------------------------------------------------------------------------
+# Verdict Report export
+# ---------------------------------------------------------------------------
+
+
+def _generate_verdict_pdf_report(scorecard: dict[str, Any]) -> bytes:
+    """Generate a Verdict scorecard PDF. Falls back to text if PyMuPDF is absent."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return _generate_verdict_text_report(scorecard)
+
+    doc = fitz.open()
+    page = doc.new_page()
+    y = 50
+
+    page.insert_text((50, y), "Verdict Report", fontsize=20, fontname="helv")
+    y += 25
+    page.insert_text((50, y), scorecard.get("pr_url", ""), fontsize=11)
+    y += 20
+    page.insert_text(
+        (50, y), f"Action: {scorecard.get('action_taken', 'N/A')}", fontsize=13,
+    )
+    y += 15
+    for line in _wrap_text(scorecard.get("action_reason", ""), 90):
+        page.insert_text((50, y), line, fontsize=10)
+        y += 12
+    y += 15
+
+    page.insert_text((50, y), "Deterministic Checks", fontsize=13)
+    y += 18
+    for check in scorecard.get("deterministic_checks", []):
+        page.insert_text(
+            (60, y),
+            f"[{check.get('status', '').upper()}] {check.get('check_name', '')} — {check.get('detail', '')[:90]}",
+            fontsize=10,
+        )
+        y += 14
+        if y > 780:
+            page = doc.new_page()
+            y = 50
+    y += 15
+
+    page.insert_text((50, y), "Claim Matches", fontsize=13)
+    y += 18
+    for match in scorecard.get("claim_matches", []):
+        page.insert_text(
+            (60, y),
+            f"[{match.get('verdict', '').upper()}] {match.get('claim', '')[:90]}",
+            fontsize=10,
+        )
+        y += 14
+        if y > 780:
+            page = doc.new_page()
+            y = 50
+
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
+
+
+def _generate_verdict_text_report(scorecard: dict[str, Any]) -> bytes:
+    lines: list[str] = [
+        "=" * 60,
+        "VERDICT REPORT",
+        "=" * 60,
+        scorecard.get("pr_url", ""),
+        f"Action: {scorecard.get('action_taken', 'N/A')}",
+        scorecard.get("action_reason", ""),
+        "",
+        "-- Deterministic Checks --",
+    ]
+    for check in scorecard.get("deterministic_checks", []):
+        lines.append(f"[{check.get('status', '')}] {check.get('check_name', '')}: {check.get('detail', '')}")
+    lines.append("")
+    lines.append("-- Claim Matches --")
+    for match in scorecard.get("claim_matches", []):
+        lines.append(f"[{match.get('verdict', '')}] {match.get('claim', '')}")
+    lines.append("=" * 60)
+    return "\n".join(lines).encode("utf-8")
+
+
+@router.post("/api/export/verdict-pdf")
+async def export_verdict_pdf(
+    request: Request,
+    current_user: User | None = Depends(get_current_user_optional),
+) -> Response:
+    """Export a VerdictScorecard (posted as JSON) as a PDF report.
+
+    Verdict runs aren't persisted to the Analysis table, so — unlike
+    /api/export/pdf — this takes the scorecard directly in the request body
+    rather than looking one up by id.
+    """
+    scorecard = await request.json()
+    pdf_bytes = _generate_verdict_pdf_report(scorecard)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=verdict-report.pdf"},
+    )

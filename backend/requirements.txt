@@ -40,3 +40,7 @@ sentence-transformers>=3.0.0
 
 # Eval harness
 pyyaml>=6.0
+
+# Verdict — deterministic verification layer + GitHub action layer
+docker>=7.1.0
+bandit>=1.7.9

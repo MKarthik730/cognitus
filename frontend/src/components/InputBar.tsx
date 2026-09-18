@@ -8,6 +8,7 @@ interface InputBarProps {
 export const InputBar: React.FC<InputBarProps> = ({ onAnalyze }) => {
   const [query, setQuery] = useState('');
   const status = useGraphStore((s) => s.status);
+  const mode = useGraphStore((s) => s.mode);
   const setQueryStore = useGraphStore((s) => s.setQuery);
 
   const handleSubmit = () => {
@@ -39,7 +40,7 @@ export const InputBar: React.FC<InputBarProps> = ({ onAnalyze }) => {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Describe a situation or ask the council..."
+        placeholder={mode === 'verdict' ? 'Paste another GitHub PR URL...' : 'Describe a situation or ask the council...'}
         disabled={isDisabled}
         className="flex-1 h-9 px-3 bg-void border border-border rounded-md text-white font-body text-[13px] outline-none placeholder:text-muted focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] disabled:opacity-40 transition-colors"
       />

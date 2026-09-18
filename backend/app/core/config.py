@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     ADMIN_SECRET: str = ""
 
     # ------------------------------------------------------------------
+    # Verdict — GitHub PR ingestion + action layer
+    # ------------------------------------------------------------------
+    GITHUB_TOKEN: str = ""
+    GITHUB_API_BASE_URL: str = "https://api.github.com"
+
+    # ------------------------------------------------------------------
     # Onboarding
     # ------------------------------------------------------------------
     ONBOARDING_COMPLETE: bool = False

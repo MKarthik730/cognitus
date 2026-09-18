@@ -83,6 +83,7 @@ from app.api.routes.plan import router as plan_router
 from app.api.routes.presets import router as presets_router
 from app.api.routes.inject import router as inject_router
 from app.api.routes.sources import router as sources_router
+from app.api.routes.verdict import router as verdict_router
 
 app.include_router(auth.router)
 app.include_router(sessions.router)
@@ -97,6 +98,7 @@ app.include_router(plan_router)
 app.include_router(presets_router)
 app.include_router(inject_router)
 app.include_router(sources_router)
+app.include_router(verdict_router)
 
 
 

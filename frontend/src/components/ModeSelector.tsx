@@ -7,6 +7,7 @@ const MODES: ModeCard[] = [
   { id: 'deep_research', icon: '🔎', name: 'Deep Research', description: '', example: '' },
   { id: 'debate', icon: '⚔️', name: 'Debate', description: '', example: '' },
   { id: 'engineering', icon: '⚙️', name: 'Engineering', description: '', example: '' },
+  { id: 'verdict', icon: '🛡️', name: 'Verdict', description: '', example: '' },
 ];
 
 interface ModeSelectorProps {
@@ -88,7 +89,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ onAnalyze }) => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe a situation or ask the council..."
+            placeholder={mode === 'verdict' ? 'Paste a GitHub PR URL (https://github.com/owner/repo/pull/123)...' : 'Describe a situation or ask the council...'}
             className="flex-1 h-10 bg-transparent text-white font-body text-[14px] outline-none placeholder:text-muted"
           />
           <button

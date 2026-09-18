@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { AgentRoster } from './components/AgentRoster';
 import { GraphCanvas } from './components/GraphCanvas';
 import { SynthesisPanel } from './components/SynthesisPanel';
+import { VerdictScorecardPanel } from './components/VerdictScorecardPanel';
 import { InputBar } from './components/InputBar';
 import { CustomNodeBuilder } from './components/CustomNodeBuilder';
 import { NodePopover } from './components/NodePopover';
@@ -42,6 +43,22 @@ const App: React.FC = () => {
     try {
       const sid = `session_${Date.now()}`;
       setSessionId(sid);
+      useGraphStore.getState().setQuery(q);
+
+      // Verdict takes a PR URL, not free-text situation — its own payload
+      // shape and its own `mode: "verdict"` field for the backend's
+      // websocket dispatch (see backend/app/api/websocket.py).
+      if (mode === 'verdict') {
+        setGraph(specialModeGraph('verdict')!);
+        setStatus('analyzing');
+        const { githubToken } = useSettingsStore.getState();
+        ws.connect(sid, {
+          mode: 'verdict',
+          pr_url: q,
+          ...(githubToken ? { github_token: githubToken } : {}),
+        });
+        return;
+      }
 
       const connectAnalysis = (plan: ReturnType<typeof specialModeGraph>) => {
         setGraph(plan!);
@@ -120,7 +137,7 @@ const App: React.FC = () => {
             </div>
             <GraphCanvas />
           </div>
-          <SynthesisPanel />
+          {mode === 'verdict' ? <VerdictScorecardPanel /> : <SynthesisPanel />}
         </div>
       )}
 

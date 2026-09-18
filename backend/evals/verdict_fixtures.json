@@ -1,0 +1,65 @@
+[
+  {
+    "name": "clean_pr",
+    "description": "All deterministic checks pass and the claim is verified against the diff — should auto-approve.",
+    "pr_url": "https://github.com/example/demo-repo/pull/1",
+    "deterministic_checks": [
+      {"check_name": "tests", "status": "pass", "detail": "12 passed, 0 failed, 0 errored."},
+      {"check_name": "static_analysis", "status": "pass", "detail": "bandit found no issues on the changed lines."},
+      {"check_name": "coverage", "status": "pass", "detail": "100% of changed lines (18) were exercised."},
+      {"check_name": "cve", "status": "pass", "detail": "No known CVEs found for 0 newly added package(s)."},
+      {"check_name": "secrets", "status": "pass", "detail": "No hardcoded secrets detected in added lines."}
+    ],
+    "claim_matches": [
+      {
+        "claim": "Fix off-by-one error in pagination and add a regression test.",
+        "verdict": "match",
+        "supporting_lines": ["+    if page_index >= total_pages:", "+def test_pagination_last_page():"],
+        "confidence": 92
+      }
+    ],
+    "expected_gate": "auto_approved"
+  },
+  {
+    "name": "deceptive_pr",
+    "description": "PR description claims input validation was added, but the diff doesn't actually do that — claim-matcher should catch it and block, even though tests pass.",
+    "pr_url": "https://github.com/example/demo-repo/pull/2",
+    "deterministic_checks": [
+      {"check_name": "tests", "status": "pass", "detail": "4 passed, 0 failed, 0 errored."},
+      {"check_name": "static_analysis", "status": "pass", "detail": "bandit found no issues on the changed lines."},
+      {"check_name": "coverage", "status": "pass", "detail": "100% of changed lines (6) were exercised."},
+      {"check_name": "cve", "status": "pass", "detail": "No known CVEs found for 0 newly added package(s)."},
+      {"check_name": "secrets", "status": "pass", "detail": "No hardcoded secrets detected in added lines."}
+    ],
+    "claim_matches": [
+      {
+        "claim": "Added input validation for the user registration endpoint.",
+        "verdict": "unsupported",
+        "supporting_lines": [],
+        "confidence": 15
+      }
+    ],
+    "expected_gate": "blocked_for_review"
+  },
+  {
+    "name": "no_tests_pr",
+    "description": "No test suite was found in the repo — must be recorded as skipped_no_data, never treated as a pass, so the gate stays blocked even though every other check is clean.",
+    "pr_url": "https://github.com/example/demo-repo/pull/3",
+    "deterministic_checks": [
+      {"check_name": "tests", "status": "skipped_no_data", "detail": "No test suite found in this repository."},
+      {"check_name": "static_analysis", "status": "pass", "detail": "bandit found no issues on the changed lines."},
+      {"check_name": "coverage", "status": "skipped_no_data", "detail": "No coverage data available (tests may not have run)."},
+      {"check_name": "cve", "status": "pass", "detail": "No known CVEs found for 0 newly added package(s)."},
+      {"check_name": "secrets", "status": "pass", "detail": "No hardcoded secrets detected in added lines."}
+    ],
+    "claim_matches": [
+      {
+        "claim": "Refactor the logging helper for readability.",
+        "verdict": "match",
+        "supporting_lines": ["+def format_log_entry(record):"],
+        "confidence": 80
+      }
+    ],
+    "expected_gate": "blocked_for_review"
+  }
+]

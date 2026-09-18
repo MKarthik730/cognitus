@@ -39,6 +39,8 @@ export const SettingsPanel: React.FC = () => {
   const customUrls = useSettingsStore((s) => s.customUrls);
   const addCustomUrl = useSettingsStore((s) => s.addCustomUrl);
   const removeCustomUrl = useSettingsStore((s) => s.removeCustomUrl);
+  const githubToken = useSettingsStore((s) => s.githubToken);
+  const setGithubToken = useSettingsStore((s) => s.setGithubToken);
 
   const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
   const [urlInput, setUrlInput] = useState('');
@@ -156,6 +158,27 @@ export const SettingsPanel: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Verdict — GitHub PR review */}
+            <div>
+              <label className="text-[9px] text-ghost font-semibold uppercase tracking-wider">
+                Verdict — GitHub Token
+              </label>
+              <p className="text-[10px] text-muted mt-0.5 mb-2">
+                Fine-grained PAT (pull_requests: write + contents: read) used
+                when reviewing a PR in Verdict mode. Leave blank to use the
+                server's configured token.
+              </p>
+              <input
+                type="password"
+                value={githubToken}
+                onChange={(e) => setGithubToken(e.target.value)}
+                placeholder="github_pat_..."
+                className="w-full h-9 px-3 text-[12px] bg-void border border-border rounded-md text-white placeholder:text-muted outline-none focus:border-pulse focus:shadow-[0_0_0_1px_#6366F1] transition-colors font-mono"
+              />
             </div>
 
             <div className="h-px bg-border" />
