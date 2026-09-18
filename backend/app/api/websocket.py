@@ -29,6 +29,8 @@ from app.services.chat_router import ChatRouter
 from app.services.node_selector import NodeSelector
 from app.services.enrichment import run_enrichment_pipeline
 from app.graph.council_graph import CouncilGraph
+from app.graph.verdict_graph import VerdictGraph
+from app.ingestion.github_client import GitHubClientError
 
 logger = logging.getLogger(__name__)
 
@@ -964,6 +966,35 @@ async def websocket_endpoint(
             except Exception as e:
                 logger.warning("Failed to persist case study data: %s", e)
             await _handle_case_study(sender, nodes, guiding_question, case_context, template=template)
+            return
+
+        # --- Handle Verdict mode (PR review) ---
+        if mode == "verdict":
+            pr_url = data.get("pr_url", "")
+            github_token = (data.get("github_token") or "").strip() or None
+            if not pr_url:
+                await sender.send({"type": "error", "message": "pr_url is required"})
+                return
+
+            verdict_graph = VerdictGraph(HFService())
+            try:
+                scorecard = await verdict_graph.run_verdict(
+                    pr_url, github_token=github_token, emit=sender.send,
+                )
+                await sender.send({
+                    "type": "complete",
+                    "data": {
+                        "status": "completed",
+                        "analysis_mode": "verdict",
+                        "mode_output": scorecard.model_dump(),
+                    },
+                })
+            except GitHubClientError as e:
+                logger.warning("Verdict ingestion failed for %s: %s", pr_url, e)
+                await sender.send({"type": "error", "message": f"Could not ingest PR: {e}"})
+            except Exception as e:
+                logger.error("Verdict run failed for %s: %s", pr_url, e)
+                await sender.send({"type": "error", "message": f"Verdict run failed: {e}"})
             return
 
         # --- Handle chat message (post-analysis conversation) ---

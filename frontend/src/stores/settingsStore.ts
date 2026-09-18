@@ -16,11 +16,16 @@ interface SettingsState {
   researchCategories: string[];
   customUrls: string[];
 
+  // Verdict — overrides the server's GITHUB_TOKEN for this browser only.
+  // Blank = use the server's configured token.
+  githubToken: string;
+
   setSettingsOpen: (open: boolean) => void;
   setLlmMode: (mode: string) => void;
   setLlmBaseUrl: (url: string) => void;
   setLlmApiKey: (key: string) => void;
   setLlmModelName: (name: string) => void;
+  setGithubToken: (token: string) => void;
   setResearchEnabled: (enabled: boolean) => void;
   toggleResearchCategory: (category: string) => void;
   addCustomUrl: (url: string) => void;
@@ -46,6 +51,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   researchEnabled: false,
   researchCategories: [],
   customUrls: [],
+  githubToken: '',
 
   setSettingsOpen: (open) => set({ isSettingsOpen: open }),
 
@@ -67,6 +73,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setLlmModelName: (name) => {
     set({ llmModelName: name });
     persist({ llmModelName: name });
+  },
+
+  setGithubToken: (token) => {
+    set({ githubToken: token });
+    persist({ githubToken: token });
   },
 
   setResearchEnabled: (enabled) => {
@@ -112,6 +123,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           researchEnabled: saved.researchEnabled ?? false,
           researchCategories: saved.researchCategories ?? [],
           customUrls: saved.customUrls ?? [],
+          githubToken: saved.githubToken ?? '',
         });
       }
     } catch {}

@@ -188,6 +188,83 @@ export function useWebSocket() {
           case 'assumptions':
             break;
 
+          // --- Verdict mode ---
+          case 'verdict_ingest_start':
+            store.setStatus('analyzing');
+            store.setGate('pending');
+            break;
+
+          case 'verdict_ingest_complete':
+            break;
+
+          case 'verdict_check_start':
+            store.setActiveNode(event.check_name);
+            break;
+
+          case 'verdict_check_complete': {
+            const c = event.check;
+            const confidence = c.status === 'pass' ? 100 : c.status === 'fail' ? 0 : 40;
+            store.updateNodeOutput(c.check_name, {
+              output: c.detail,
+              confidence,
+              verdict: c.status,
+              sentiment: c.status === 'pass' ? 'positive' : c.status === 'fail' ? 'negative' : 'neutral',
+            });
+            store.setActiveNode(null);
+            break;
+          }
+
+          case 'verdict_opinion_start':
+            store.setActiveNode(event.domain);
+            break;
+
+          case 'verdict_opinion_complete': {
+            const f = event.finding;
+            store.updateNodeOutput(f.domain, {
+              output: f.reasoning || '',
+              confidence: f.confidence ?? 50,
+              verdict: f.position || '',
+              sentiment: 'neutral',
+              reasoning: f.reasoning || '',
+              keyPoints: f.key_findings || [],
+              evidence: f.evidence || [],
+              uncertainty: f.uncertainty || [],
+            });
+            store.setActiveNode(null);
+            break;
+          }
+
+          case 'verdict_claim_start':
+            store.setActiveNode('claim_matcher');
+            break;
+
+          case 'verdict_claim_complete': {
+            const m = event.match;
+            const existing = useGraphStore.getState().nodeOutputs.claim_matcher;
+            const priorLines = existing?.keyPoints ?? [];
+            const priorText = existing?.output ? existing.output + '\n' : '';
+            const sentiment = m.verdict !== 'match'
+              ? 'negative'
+              : existing?.sentiment === 'negative' ? 'negative' : 'positive';
+            store.updateNodeOutput('claim_matcher', {
+              output: `${priorText}"${m.claim}" -> ${m.verdict}`,
+              confidence: m.confidence,
+              verdict: m.verdict,
+              sentiment,
+              keyPoints: [...priorLines, m.claim],
+            });
+            break;
+          }
+
+          case 'verdict_gate_update':
+            store.setGate(event.gate, event.action_reason);
+            break;
+
+          case 'verdict_complete':
+            store.setVerdictScorecard(event.scorecard);
+            store.setActiveNode(null);
+            break;
+
           // Unknown — log for debugging
           default:
             console.debug('Unhandled WS event type:', event.type);

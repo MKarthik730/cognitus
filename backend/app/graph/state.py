@@ -124,6 +124,38 @@ class GraphMetadata(TypedDict):
     ghost_level: NotRequired[GhostLevel]
 
 
+VerdictPipelineStatus = Literal[
+    "pending", "ingesting", "deterministic_checks", "opinion_review",
+    "claim_matching", "synthesizing", "acting", "completed", "failed",
+]
+
+
+class VerdictState(TypedDict):
+    """State for the Verdict PR-review pipeline (see app/graph/verdict_graph.py).
+
+    Deliberately separate from CouncilState — a PR review has a different
+    shape (structured diff/metadata, not free-text `situation`) and a
+    different terminal artifact (a gated VerdictScorecard, not a
+    SynthesisOutput).
+    """
+
+    pr_url: str
+    status: VerdictPipelineStatus
+    github_token: NotRequired[str | None]
+    pr_metadata: NotRequired[dict]
+    diffs: NotRequired[dict[str, str]]
+    file_contents_head: NotRequired[dict[str, str]]
+    manifests_before: NotRequired[dict[str, str]]
+    manifests_after: NotRequired[dict[str, str]]
+    deterministic_checks: NotRequired[list[dict]]
+    covered_lines_by_file: NotRequired[dict[str, list[int]]]
+    opinion_findings: NotRequired[list[dict]]
+    claim_matches: NotRequired[list[dict]]
+    unintended_scope: NotRequired[list[str]]
+    scorecard: NotRequired[dict]
+    errors: NotRequired[list[str]]
+
+
 class CouncilState(TypedDict):
     situation: str
     metadata: GraphMetadata
