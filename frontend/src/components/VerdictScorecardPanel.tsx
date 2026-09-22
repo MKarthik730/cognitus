@@ -149,6 +149,22 @@ export const VerdictScorecardPanel: React.FC = () => {
           </div>
         </div>
 
+        {/* Unintended scope */}
+        {scorecard && scorecard.unintended_scope.length > 0 && (
+          <div className="px-3.5 py-3 border-b border-border">
+            <span className="text-[9px] text-amber-400 font-semibold uppercase tracking-wider">
+              Unintended Scope ({scorecard.unintended_scope.length})
+            </span>
+            <div className="mt-2 space-y-1.5">
+              {scorecard.unintended_scope.map((s, i) => (
+                <div key={i} className="p-2 rounded-sm bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-[10px] text-amber-200 leading-relaxed">{s}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Action taken */}
         {scorecard && (
           <div className="px-3.5 py-3">
@@ -156,10 +172,13 @@ export const VerdictScorecardPanel: React.FC = () => {
             <div className={`mt-2 p-3 rounded-md border ${
               scorecard.action_taken === 'auto_approved'
                 ? 'bg-green-500/5 border-green-500/20'
+                : scorecard.action_taken === 'action_failed'
+                ? 'bg-amber-500/5 border-amber-500/20'
                 : 'bg-red-500/5 border-red-500/20'
             }`}>
               <p className={`text-[11px] font-mono font-semibold uppercase ${
-                scorecard.action_taken === 'auto_approved' ? 'text-green-400' : 'text-red-400'
+                scorecard.action_taken === 'auto_approved' ? 'text-green-400' :
+                scorecard.action_taken === 'action_failed' ? 'text-amber-400' : 'text-red-400'
               }`}>
                 {scorecard.action_taken.replace(/_/g, ' ')}
               </p>

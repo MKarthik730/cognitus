@@ -55,6 +55,7 @@ _PYTHON_SCRIPT = r"""
 set -e
 git clone --quiet --depth 50 "{clone_url}" /repo
 cd /repo && git checkout --quiet {head_sha}
+printf '[run]\nrelative_files = True\n' > .coveragerc
 pip install --quiet --no-cache-dir -r requirements.txt 2>/dev/null || true
 pip install --quiet --no-cache-dir pytest coverage
 if find . -name 'test_*.py' -o -name '*_test.py' | grep -q .; then

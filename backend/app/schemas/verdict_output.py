@@ -19,7 +19,7 @@ from app.schemas.node_output import NodeOutput
 CheckName = Literal["tests", "static_analysis", "coverage", "cve", "secrets"]
 CheckStatus = Literal["pass", "fail", "error", "skipped_no_data"]
 ClaimVerdict = Literal["match", "mismatch", "partial", "unsupported"]
-ActionTaken = Literal["auto_approved", "blocked_for_review", "issue_filed"]
+ActionTaken = Literal["auto_approved", "blocked_for_review", "issue_filed", "action_failed"]
 
 
 class DeterministicCheckResult(BaseModel):

@@ -59,7 +59,7 @@ const initialState = {
   verdictScorecard: null as VerdictScorecard | null,
 };
 
-export const useGraphStore = create<GraphState>((set) => ({
+export const useGraphStore = create<GraphState>((set, get) => ({
   ...initialState,
 
   setSessionId: (id) => set({ sessionId: id }),
@@ -99,5 +99,10 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setVerdictScorecard: (scorecard) => set({ verdictScorecard: scorecard }),
 
-  reset: () => set(initialState),
+  // A new analysis keeps whatever mode is currently selected — reset() runs
+  // at the start of every handleAnalyze call (including Verdict's), so
+  // clobbering `mode` back to the initial 'standard' here previously made
+  // the UI render SynthesisPanel instead of VerdictScorecardPanel even
+  // though the backend correctly ran the Verdict pipeline.
+  reset: () => set({ ...initialState, mode: get().mode }),
 }));
