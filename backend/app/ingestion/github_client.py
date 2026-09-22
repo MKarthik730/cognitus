@@ -8,9 +8,11 @@ one PR, two outcomes.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +25,13 @@ logger = logging.getLogger(__name__)
 PR_URL_RE = re.compile(
     r"github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)"
 )
+
+# Transient-failure handling: retried automatically, capped and bounded so a
+# stuck GitHub API call can't hang a Verdict run indefinitely.
+_MAX_ATTEMPTS = 4
+_BASE_BACKOFF_SECONDS = 1.0
+_MAX_BACKOFF_SECONDS = 60.0
+_RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 
 
 class GitHubClientError(Exception):
@@ -82,11 +91,85 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
 
+    async def _request(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        url: str,
+        *,
+        idempotent: bool = True,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """Issue one HTTP call with retry/backoff for transient failures.
+
+        Retries 5xx responses with exponential backoff and honors both
+        GitHub rate-limit signals: the primary limit (403 +
+        `X-RateLimit-Remaining: 0`, wait until `X-RateLimit-Reset`) and the
+        secondary/abuse limit (429 + `Retry-After`). Any other status code
+        (2xx, or a "real" 4xx like 401/404/422) is returned immediately for
+        the caller to interpret — this only handles "try again", never "was
+        this successful".
+
+        A raw network/timeout error (`httpx.RequestError`) is only retried
+        when `idempotent=True` (the default, used for GETs) — for a write
+        like posting a review or filing an issue, a timeout means we don't
+        actually know whether GitHub received and applied it, so retrying
+        risks a duplicate review/issue. Callers making a write pass
+        `idempotent=False` to fail fast on that ambiguity instead.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                resp = await client.request(method, url, **kwargs)
+            except httpx.RequestError as e:
+                if not idempotent:
+                    raise GitHubClientError(
+                        f"Network error calling GitHub API ({method} {url}); "
+                        f"the write's outcome is unknown, not retrying: {e}"
+                    ) from e
+                last_exc = e
+                if attempt == _MAX_ATTEMPTS:
+                    raise GitHubClientError(
+                        f"Network error calling GitHub API ({method} {url}): {e}"
+                    ) from e
+                await asyncio.sleep(_BASE_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+                continue
+
+            if resp.status_code == 403 and resp.headers.get("X-RateLimit-Remaining") == "0":
+                if attempt == _MAX_ATTEMPTS:
+                    raise GitHubClientError(
+                        f"GitHub API rate limit exhausted for {method} {url}"
+                    )
+                reset_at = resp.headers.get("X-RateLimit-Reset")
+                wait_s = max(0.0, float(reset_at) - time.time()) if reset_at else _BASE_BACKOFF_SECONDS
+                await asyncio.sleep(min(wait_s, _MAX_BACKOFF_SECONDS))
+                continue
+
+            if resp.status_code == 429:
+                if attempt == _MAX_ATTEMPTS:
+                    raise GitHubClientError(f"GitHub API secondary rate limit hit for {method} {url}")
+                retry_after = resp.headers.get("Retry-After")
+                wait_s = float(retry_after) if retry_after else _BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
+                await asyncio.sleep(min(wait_s, _MAX_BACKOFF_SECONDS))
+                continue
+
+            if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_ATTEMPTS:
+                await asyncio.sleep(_BASE_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+                continue
+
+            return resp
+
+        # Unreachable in practice (the loop always returns or raises above),
+        # but keeps the type checker honest and fails closed if it ever isn't.
+        raise GitHubClientError(
+            f"GitHub API request failed after {_MAX_ATTEMPTS} attempts: {method} {url}"
+        ) from last_exc
+
     async def fetch_pr(self, owner: str, repo: str, pr_number: int) -> PRMetadata:
         """Fetch PR metadata + the list of changed files (GET, read-only)."""
         async with httpx.AsyncClient(timeout=20.0, headers=self._headers()) as client:
-            pr_resp = await client.get(
-                f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
+            pr_resp = await self._request(
+                client, "GET", f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
             )
             if pr_resp.status_code != 200:
                 raise GitHubClientError(
@@ -97,7 +180,8 @@ class GitHubClient:
             files: list[PRFile] = []
             page = 1
             while True:
-                files_resp = await client.get(
+                files_resp = await self._request(
+                    client, "GET",
                     f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/files",
                     params={"per_page": 100, "page": page},
                 )
@@ -140,10 +224,14 @@ class GitHubClient:
     ) -> str | None:
         """Fetch a single file's full content at a given ref. None if missing/binary."""
         async with httpx.AsyncClient(timeout=15.0, headers=self._headers()) as client:
-            resp = await client.get(
-                f"{self.base_url}/repos/{owner}/{repo}/contents/{path}",
-                params={"ref": ref},
-            )
+            try:
+                resp = await self._request(
+                    client, "GET", f"{self.base_url}/repos/{owner}/{repo}/contents/{path}",
+                    params={"ref": ref},
+                )
+            except GitHubClientError as e:
+                logger.warning("Failed to fetch file content for %s@%s: %s", path, ref, e)
+                return None
             if resp.status_code != 200:
                 return None
             data = resp.json()
@@ -165,8 +253,9 @@ class GitHubClient:
         """POST /repos/{owner}/{repo}/pulls/{pr_number}/reviews — used only when
         every deterministic check passed and every claim matched."""
         async with httpx.AsyncClient(timeout=20.0, headers=self._headers()) as client:
-            resp = await client.post(
-                f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
+            resp = await self._request(
+                client, "POST", f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
+                idempotent=False,
                 json={"body": body, "event": event},
             )
             if resp.status_code not in (200, 201):
@@ -180,8 +269,9 @@ class GitHubClient:
     ) -> dict[str, Any]:
         """POST /repos/{owner}/{repo}/issues — used for contested/failed checks."""
         async with httpx.AsyncClient(timeout=20.0, headers=self._headers()) as client:
-            resp = await client.post(
-                f"{self.base_url}/repos/{owner}/{repo}/issues",
+            resp = await self._request(
+                client, "POST", f"{self.base_url}/repos/{owner}/{repo}/issues",
+                idempotent=False,
                 json={"title": title, "body": body},
             )
             if resp.status_code not in (200, 201):

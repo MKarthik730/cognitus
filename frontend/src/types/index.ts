@@ -234,7 +234,7 @@ export type WSEvent =
 export type CheckName = 'tests' | 'static_analysis' | 'coverage' | 'cve' | 'secrets';
 export type CheckStatus = 'pass' | 'fail' | 'error' | 'skipped_no_data';
 export type ClaimVerdict = 'match' | 'mismatch' | 'partial' | 'unsupported';
-export type VerdictAction = 'auto_approved' | 'blocked_for_review' | 'issue_filed';
+export type VerdictAction = 'auto_approved' | 'blocked_for_review' | 'issue_filed' | 'action_failed';
 export type GateStatus = 'locked' | 'unlocked' | 'pending';
 
 export interface DeterministicCheckResult {

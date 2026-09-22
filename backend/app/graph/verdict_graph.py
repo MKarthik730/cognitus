@@ -33,6 +33,7 @@ from app.services.hf_service import HFService
 from app.verification.coverage_check import compute_diff_coverage
 from app.verification.dependency_scanner import scan_dependencies
 from app.verification.sandbox_runner import run_sandbox_tests
+from app.verification.scope_check import detect_unintended_scope
 from app.verification.secret_scanner import scan_diff_for_secrets
 from app.verification.static_analysis import run_bandit
 
@@ -66,6 +67,24 @@ OPINION_ROSTER: dict[str, str] = {
         "behavior rather than just asserting it exists. Flag untested risk directly."
     ),
 }
+
+# A degenerate LLM response for an opinion node's `position` field (e.g. the
+# model just echoes its own role back) is noise, not a claim — feeding it to
+# the claim matcher wastes a call and produces a meaningless "unsupported"
+# result. This is a cheap sanity filter, not a quality guarantee.
+_MIN_CLAIM_LENGTH = 20
+
+
+def _looks_like_real_claim(text: str, domain: str) -> bool:
+    normalized = text.strip().rstrip(".").lower()
+    if len(normalized) < _MIN_CLAIM_LENGTH:
+        return False
+    generic_role_labels = {
+        domain.lower(),
+        f"{domain.lower()} engineer",
+        "backend engineer", "security engineer", "devops lead", "qa engineer",
+    }
+    return normalized not in generic_role_labels
 
 
 class VerdictGraph:
@@ -148,10 +167,15 @@ class VerdictGraph:
             "changed_files": [f.filename for f in pr.files],
         }
 
+        unintended_scope = detect_unintended_scope(
+            pr.title, pr.body, pr_metadata["changed_files"],
+        )
+
         await self._send({
             "type": "verdict_ingest_complete",
             "pr_metadata": pr_metadata,
             "files_changed": len(pr.files),
+            "unintended_scope": unintended_scope,
         })
 
         return {
@@ -160,6 +184,7 @@ class VerdictGraph:
             "file_contents_head": file_contents_head,
             "manifests_before": manifests_before,
             "manifests_after": manifests_after,
+            "unintended_scope": unintended_scope,
             "status": "deterministic_checks",
         }
 
@@ -268,8 +293,9 @@ class VerdictGraph:
             claims.append(pr_metadata["title"])
 
         for finding in state.get("opinion_findings", []):
-            position = finding.get("position")
-            if position and position not in claims:
+            position = (finding.get("position") or "").strip()
+            domain = finding.get("domain", "")
+            if position and position not in claims and _looks_like_real_claim(position, domain):
                 claims.append(position)
 
         async def _match_one(claim: str) -> ClaimMatchResult:
@@ -312,9 +338,10 @@ class VerdictGraph:
         pr_metadata = state["pr_metadata"]
         owner, repo, number = pr_metadata["owner"], pr_metadata["repo"], pr_metadata["number"]
         client = GitHubClient(state.get("github_token"))
+        intended_action = scorecard.action_taken
 
         try:
-            if scorecard.action_taken == "auto_approved":
+            if intended_action == "auto_approved":
                 await client.post_review(
                     owner, repo, number,
                     body=self._format_approval_comment(scorecard),
@@ -328,8 +355,17 @@ class VerdictGraph:
                 )
                 scorecard.action_taken = "issue_filed"
         except GitHubClientError as e:
-            logger.error("Verdict action layer failed: %s", e)
-            scorecard.action_reason += f" [Action layer error: {e}]"
+            # The gate's decision (intended_action) and what actually landed on
+            # GitHub are two different facts — a failed write must never be
+            # reported as the decision it failed to carry out, especially not
+            # as "auto_approved" when nothing was actually posted.
+            logger.error(
+                "Verdict action layer failed to %s: %s",
+                "post the approval review" if intended_action == "auto_approved" else "file the issue",
+                e,
+            )
+            scorecard.action_taken = "action_failed"
+            scorecard.action_reason += f" [Action layer error — GitHub write failed: {e}]"
 
         await self._send({"type": "verdict_complete", "scorecard": scorecard.model_dump()})
         return {"scorecard": scorecard.model_dump(), "status": "completed"}
